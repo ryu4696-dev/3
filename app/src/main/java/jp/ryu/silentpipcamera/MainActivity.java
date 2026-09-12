@@ -62,8 +62,7 @@ public class MainActivity extends android.app.Activity {
             public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
             public void onSurfaceTextureUpdated(SurfaceTexture s) {}
         });
-        setPictureInPictureParams(new PictureInPictureParams.Builder()
-                .setAspectRatio(new Rational(16, 9)).setAutoEnterEnabled(true).setSeamlessResizeEnabled(true).build());
+        setPictureInPictureParams(pipParams(true));
     }
 
     @Override protected void onResume() {
@@ -72,6 +71,7 @@ public class MainActivity extends android.app.Activity {
         cameraThread.start();
         cameraHandler = new Handler(cameraThread.getLooper());
         if (preview.isAvailable() && camera == null) openCamera();
+        preview.post(() -> setPictureInPictureParams(pipParams(true)));
     }
 
     @Override protected void onPause() {
@@ -94,7 +94,17 @@ public class MainActivity extends android.app.Activity {
     }
 
     private void enterPip() {
-        enterPictureInPictureMode(new PictureInPictureParams.Builder().setAspectRatio(new Rational(16, 9)).build());
+        enterPictureInPictureMode(pipParams(false));
+    }
+
+    private PictureInPictureParams pipParams(boolean autoEnter) {
+        int w = preview == null || preview.getWidth() == 0 ? 9 : preview.getWidth();
+        int h = preview == null || preview.getHeight() == 0 ? 16 : preview.getHeight();
+        float ratio = (float) w / h;
+        if (ratio < 0.45f) { w = 9; h = 20; }
+        else if (ratio > 2.20f) { w = 20; h = 9; }
+        return new PictureInPictureParams.Builder().setAspectRatio(new Rational(w, h))
+                .setAutoEnterEnabled(autoEnter).setSeamlessResizeEnabled(true).build();
     }
 
     private void openCamera() {
