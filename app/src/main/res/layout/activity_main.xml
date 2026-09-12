@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <TextureView
+        android:id="@+id/preview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <LinearLayout
+        android:id="@+id/controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:padding="18dp"
+        android:background="#66000000">
+
+        <Button
+            android:id="@+id/switchCamera"
+            android:layout_width="wrap_content"
+            android:layout_height="56dp"
+            android:text="切替" />
+
+        <Button
+            android:id="@+id/record"
+            android:layout_width="120dp"
+            android:layout_height="64dp"
+            android:layout_marginHorizontal="18dp"
+            android:text="録画開始" />
+
+        <Button
+            android:id="@+id/pip"
+            android:layout_width="wrap_content"
+            android:layout_height="56dp"
+            android:text="PiP" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="28dp"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="8dp"
+        android:background="#88000000"
+        android:textColor="#ffffff"
+        android:text="準備中" />
+</FrameLayout>
