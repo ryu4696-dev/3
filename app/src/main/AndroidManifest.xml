@@ -12,7 +12,6 @@
             android:name=".MainActivity"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboardHidden"
             android:exported="true"
-            android:screenOrientation="landscape"
             android:resizeableActivity="true"
             android:supportsPictureInPicture="true">
             <intent-filter>
