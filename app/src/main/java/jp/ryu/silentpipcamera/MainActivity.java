@@ -4,6 +4,8 @@ import android.Manifest;
 import android.app.PictureInPictureParams;
 import android.content.ContentValues;
 import android.content.pm.PackageManager;
+import android.graphics.Matrix;
+import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.*;
 import android.media.MediaRecorder;
@@ -55,8 +57,8 @@ public class MainActivity extends android.app.Activity {
         });
         findViewById(R.id.pip).setOnClickListener(v -> enterPip());
         preview.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-            public void onSurfaceTextureAvailable(SurfaceTexture s, int w, int h) { openCamera(); }
-            public void onSurfaceTextureSizeChanged(SurfaceTexture s, int w, int h) {}
+            public void onSurfaceTextureAvailable(SurfaceTexture s, int w, int h) { configureTransform(w, h); openCamera(); }
+            public void onSurfaceTextureSizeChanged(SurfaceTexture s, int w, int h) { configureTransform(w, h); }
             public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
             public void onSurfaceTextureUpdated(SurfaceTexture s) {}
         });
@@ -88,6 +90,7 @@ public class MainActivity extends android.app.Activity {
         super.onPictureInPictureModeChanged(inPip, c);
         controls.setVisibility(inPip ? View.GONE : View.VISIBLE);
         status.setVisibility(inPip ? View.GONE : View.VISIBLE);
+        preview.post(() -> configureTransform(preview.getWidth(), preview.getHeight()));
     }
 
     private void enterPip() {
@@ -102,6 +105,7 @@ public class MainActivity extends android.app.Activity {
         try {
             CameraManager cm = getSystemService(CameraManager.class);
             cameraId = chooseCamera(cm);
+            configureTransform(preview.getWidth(), preview.getHeight());
             cm.openCamera(cameraId, new CameraDevice.StateCallback() {
                 public void onOpened(CameraDevice c) { camera = c; createPreview(); }
                 public void onDisconnected(CameraDevice c) { c.close(); camera = null; }
@@ -123,6 +127,23 @@ public class MainActivity extends android.app.Activity {
         SurfaceTexture st = preview.getSurfaceTexture();
         st.setDefaultBufferSize(videoSize.getWidth(), videoSize.getHeight());
         return new Surface(st);
+    }
+
+    private void configureTransform(int viewWidth, int viewHeight) {
+        if (viewWidth == 0 || viewHeight == 0) return;
+        Matrix matrix = new Matrix();
+        RectF view = new RectF(0, 0, viewWidth, viewHeight);
+        RectF buffer = new RectF(0, 0, videoSize.getHeight(), videoSize.getWidth());
+        float cx = view.centerX(), cy = view.centerY();
+        buffer.offset(cx - buffer.centerX(), cy - buffer.centerY());
+        matrix.setRectToRect(view, buffer, Matrix.ScaleToFit.FILL);
+        float scale = Math.max((float)viewHeight / videoSize.getHeight(), (float)viewWidth / videoSize.getWidth());
+        matrix.postScale(scale, scale, cx, cy);
+        int rotation = getDisplay() == null ? Surface.ROTATION_90 : getDisplay().getRotation();
+        if (rotation == Surface.ROTATION_90) matrix.postRotate(-90, cx, cy);
+        else if (rotation == Surface.ROTATION_270) matrix.postRotate(90, cx, cy);
+        else if (rotation == Surface.ROTATION_180) matrix.postRotate(180, cx, cy);
+        preview.setTransform(matrix);
     }
 
     private void createPreview() {
