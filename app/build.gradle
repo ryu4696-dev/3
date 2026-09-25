@@ -5,10 +5,14 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'jp.ryu.silentpipcamera'
-        minSdk 31
+        applicationId 'jp.ryu.anatomydiffusion'
+        minSdk 29
         targetSdk 35
-        versionCode 3
-        versionName '3.0'
+        versionCode 1
+        versionName '0.1.0'
     }
+}
+
+dependencies {
+    implementation 'com.google.mediapipe:tasks-vision-image-generator:0.10.26.1'
 }
