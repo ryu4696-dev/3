@@ -1,254 +1,426 @@
 package jp.ryu.silentpipcamera;
 
-import android.Manifest;
-import android.app.PictureInPictureParams;
+import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ContentValues;
-import android.content.pm.PackageManager;
-import android.graphics.Matrix;
-import android.graphics.RectF;
-import android.graphics.SurfaceTexture;
-import android.hardware.camera2.*;
-import android.media.MediaRecorder;
+import android.content.Intent;
+import android.graphics.Bitmap;
 import android.net.Uri;
-import android.os.*;
+import android.os.Bundle;
+import android.os.Environment;
 import android.provider.MediaStore;
-import android.util.Rational;
-import android.util.Size;
-import android.view.Surface;
-import android.view.TextureView;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.io.FileDescriptor;
-import java.util.*;
+import com.google.mediapipe.framework.image.BitmapExtractor;
+import com.google.mediapipe.tasks.vision.imagegenerator.ImageGenerator;
+import com.google.mediapipe.tasks.vision.imagegenerator.ImageGeneratorResult;
 
-public class MainActivity extends android.app.Activity {
-    private TextureView preview;
-    private View controls;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
+public class MainActivity extends Activity {
+    private static final int PICK_MODEL = 7001;
+    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+
+    private EditText prompt;
+    private EditText negativePrompt;
+    private EditText steps;
+    private EditText seed;
+    private CheckBox filterSwitch;
     private TextView status;
-    private Button record;
-    private CameraDevice camera;
-    private CameraCaptureSession session;
-    private MediaRecorder recorder;
-    private HandlerThread cameraThread;
-    private Handler cameraHandler;
-    private String cameraId;
-    private boolean front = false;
-    private boolean recording = false;
-    private Uri pendingVideo;
-    private android.os.ParcelFileDescriptor outputFile;
-    private final Size videoSize = new Size(1920, 1080);
+    private TextView modelInfo;
+    private ImageView image;
+    private Button generate;
+    private Button save;
 
-    @Override protected void onCreate(Bundle state) {
+    private ImageGenerator generator;
+    private Bitmap lastBitmap;
+    private File modelDir;
+
+    @Override
+    protected void onCreate(Bundle state) {
         super.onCreate(state);
-        setContentView(R.layout.activity_main);
-        preview = findViewById(R.id.preview);
-        controls = findViewById(R.id.controls);
-        status = findViewById(R.id.status);
-        record = findViewById(R.id.record);
-        record.setOnClickListener(v -> { if (recording) stopRecording(); else startRecording(); });
-        findViewById(R.id.switchCamera).setOnClickListener(v -> {
-            if (recording) return;
-            front = !front;
-            closeCamera();
-            openCamera();
+        modelDir = findInstalledModel();
+        setContentView(buildUi());
+        updateModelInfo();
+        if (modelDir != null) initAsync();
+    }
+
+    private View buildUi() {
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(18), dp(18), dp(18), dp(36));
+        scroll.addView(root);
+
+        root.addView(label("Anatomy Diffusion", 26, true), full());
+        TextView intro = label("ON-DEVICE / OFFLINE / DEBUG BUILD", 13, false);
+        intro.setAlpha(.7f);
+        root.addView(intro, full());
+        space(root, 12);
+
+        modelInfo = label("", 13, true);
+        root.addView(modelInfo, full());
+
+        Button importModel = new Button(this);
+        importModel.setText("モデルZIPを読み込む");
+        importModel.setOnClickListener(v -> pickModel());
+        root.addView(importModel, full());
+
+        prompt = new EditText(this);
+        prompt.setHint("Prompt");
+        prompt.setMinLines(4);
+        prompt.setGravity(Gravity.TOP);
+        root.addView(prompt, full());
+
+        negativePrompt = new EditText(this);
+        negativePrompt.setHint("Negative Prompt（現在のMediaPipe backendでは未使用）");
+        negativePrompt.setMinLines(2);
+        root.addView(negativePrompt, full());
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        steps = new EditText(this);
+        steps.setHint("Steps");
+        steps.setText("20");
+        steps.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        row.addView(steps, new LinearLayout.LayoutParams(0, dp(60), 1f));
+
+        seed = new EditText(this);
+        seed.setHint("Seed");
+        seed.setText(String.valueOf((int)(System.currentTimeMillis() & 0x7fffffff)));
+        seed.setInputType(android.text.InputType.TYPE_CLASS_NUMBER |
+                android.text.InputType.TYPE_NUMBER_FLAG_SIGNED);
+        row.addView(seed, new LinearLayout.LayoutParams(0, dp(60), 1f));
+        root.addView(row, full());
+
+        Button reseed = new Button(this);
+        reseed.setText("Seedを更新");
+        reseed.setOnClickListener(v ->
+                seed.setText(String.valueOf((int)(System.currentTimeMillis() & 0x7fffffff))));
+        root.addView(reseed, full());
+
+        filterSwitch = new CheckBox(this);
+        filterSwitch.setText("Local Filter path（初期OFF / デバッグ用）");
+        filterSwitch.setChecked(false);
+        root.addView(filterSwitch, full());
+
+        TextView filterNote = label(
+                "v0.1では判定ルールを入れず、ON時に文字列 BLOCK_TEST のみ停止します。生成エンジンの不具合とフィルタ経路を切り分けるための試験用です。",
+                12, false);
+        filterNote.setAlpha(.68f);
+        root.addView(filterNote, full());
+
+        generate = new Button(this);
+        generate.setText("GENERATE");
+        generate.setOnClickListener(v -> generateImage());
+        root.addView(generate, full());
+
+        status = label("待機中", 13, false);
+        root.addView(status, full());
+        space(root, 10);
+
+        image = new ImageView(this);
+        image.setAdjustViewBounds(true);
+        image.setBackgroundColor(0xff111318);
+        root.addView(image, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(420)));
+
+        save = new Button(this);
+        save.setText("画像を保存");
+        save.setEnabled(false);
+        save.setOnClickListener(v -> saveImage());
+        root.addView(save, full());
+
+        TextView footer = label(
+                "モデル本体はAPKに含みません。変換済みMediaPipe Image GeneratorモデルをZIPで読み込んで端末内に展開します。",
+                12, false);
+        footer.setAlpha(.65f);
+        root.addView(footer, full());
+        return scroll;
+    }
+
+    private void pickModel() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("application/zip");
+        startActivityForResult(i, PICK_MODEL);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PICK_MODEL && resultCode == RESULT_OK &&
+                data != null && data.getData() != null) {
+            importModel(data.getData());
+        }
+    }
+
+    private void importModel(Uri uri) {
+        generate.setEnabled(false);
+        status.setText("モデル展開中…");
+        worker.execute(() -> {
+            try {
+                closeGenerator();
+                File root = new File(getFilesDir(), "image_generator_model");
+                deleteTree(root);
+                if (!root.mkdirs() && !root.isDirectory()) {
+                    throw new IllegalStateException("保存フォルダを作成できません");
+                }
+
+                InputStream input = getContentResolver().openInputStream(uri);
+                if (input == null) throw new IllegalStateException("ZIPを開けません");
+
+                try (ZipInputStream zip = new ZipInputStream(input)) {
+                    ZipEntry entry;
+                    byte[] buf = new byte[1024 * 1024];
+                    String safeRoot = root.getCanonicalPath() + File.separator;
+                    while ((entry = zip.getNextEntry()) != null) {
+                        File out = new File(root, entry.getName());
+                        if (!out.getCanonicalPath().startsWith(safeRoot)) {
+                            throw new IllegalStateException("ZIP内パスが不正です");
+                        }
+                        if (entry.isDirectory()) {
+                            if (!out.mkdirs() && !out.isDirectory()) {
+                                throw new IllegalStateException("フォルダ作成失敗");
+                            }
+                        } else {
+                            File parent = out.getParentFile();
+                            if (parent != null && !parent.mkdirs() && !parent.isDirectory()) {
+                                throw new IllegalStateException("フォルダ作成失敗");
+                            }
+                            try (OutputStream os = new FileOutputStream(out)) {
+                                int n;
+                                while ((n = zip.read(buf)) > 0) os.write(buf, 0, n);
+                            }
+                        }
+                        zip.closeEntry();
+                    }
+                }
+
+                modelDir = detectModelDir(root);
+                runOnUiThread(() -> {
+                    updateModelInfo();
+                    status.setText("モデル初期化中…");
+                });
+                initGenerator();
+                runOnUiThread(() -> {
+                    status.setText("準備完了");
+                    generate.setEnabled(true);
+                });
+            } catch (Throwable t) {
+                runOnUiThread(() -> {
+                    status.setText("モデル読込失敗");
+                    generate.setEnabled(true);
+                    error("モデル読込失敗", t);
+                });
+            }
         });
-        findViewById(R.id.pip).setOnClickListener(v -> enterPip());
-        preview.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-            public void onSurfaceTextureAvailable(SurfaceTexture s, int w, int h) { configureTransform(w, h); openCamera(); }
-            public void onSurfaceTextureSizeChanged(SurfaceTexture s, int w, int h) { configureTransform(w, h); }
-            public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
-            public void onSurfaceTextureUpdated(SurfaceTexture s) {}
+    }
+
+    private File detectModelDir(File root) {
+        File bins = new File(root, "bins");
+        if (bins.isDirectory()) return bins;
+        File[] list = root.listFiles();
+        if (list != null && list.length == 1 && list[0].isDirectory()) {
+            File nestedBins = new File(list[0], "bins");
+            if (nestedBins.isDirectory()) return nestedBins;
+            return list[0];
+        }
+        return root;
+    }
+
+    private File findInstalledModel() {
+        File root = new File(getFilesDir(), "image_generator_model");
+        return root.isDirectory() ? detectModelDir(root) : null;
+    }
+
+    private void initAsync() {
+        generate.setEnabled(false);
+        status.setText("モデル初期化中…");
+        worker.execute(() -> {
+            try {
+                initGenerator();
+                runOnUiThread(() -> {
+                    status.setText("準備完了");
+                    generate.setEnabled(true);
+                });
+            } catch (Throwable t) {
+                runOnUiThread(() -> {
+                    status.setText("初期化失敗");
+                    generate.setEnabled(true);
+                    error("初期化失敗", t);
+                });
+            }
         });
-        setPictureInPictureParams(pipParams(true));
     }
 
-    @Override protected void onResume() {
-        super.onResume();
-        cameraThread = new HandlerThread("Camera");
-        cameraThread.start();
-        cameraHandler = new Handler(cameraThread.getLooper());
-        if (preview.isAvailable() && camera == null) openCamera();
-        preview.post(() -> setPictureInPictureParams(pipParams(true)));
+    private void initGenerator() {
+        if (modelDir == null || !modelDir.isDirectory()) {
+            throw new IllegalStateException("モデル未読込");
+        }
+        closeGenerator();
+        ImageGenerator.ImageGeneratorOptions options =
+                ImageGenerator.ImageGeneratorOptions.builder()
+                        .setImageGeneratorModelDirectory(modelDir.getAbsolutePath())
+                        .build();
+        generator = ImageGenerator.createFromOptions(this, options);
     }
 
-    @Override protected void onPause() {
-        super.onPause();
-        if (!isInPictureInPictureMode() && !recording) closeCamera();
-    }
-
-    @Override protected void onDestroy() {
-        if (recording) stopRecording();
-        closeCamera();
-        if (cameraThread != null) cameraThread.quitSafely();
-        super.onDestroy();
-    }
-
-    @Override public void onPictureInPictureModeChanged(boolean inPip, android.content.res.Configuration c) {
-        super.onPictureInPictureModeChanged(inPip, c);
-        controls.setVisibility(inPip ? View.GONE : View.VISIBLE);
-        status.setVisibility(inPip ? View.GONE : View.VISIBLE);
-        preview.post(() -> configureTransform(preview.getWidth(), preview.getHeight()));
-    }
-
-    private void enterPip() {
-        enterPictureInPictureMode(pipParams(false));
-    }
-
-    private PictureInPictureParams pipParams(boolean autoEnter) {
-        int w = preview == null || preview.getWidth() == 0 ? 9 : preview.getWidth();
-        int h = preview == null || preview.getHeight() == 0 ? 16 : preview.getHeight();
-        float ratio = (float) w / h;
-        if (ratio < 0.45f) { w = 9; h = 20; }
-        else if (ratio > 2.20f) { w = 20; h = 9; }
-        return new PictureInPictureParams.Builder().setAspectRatio(new Rational(w, h))
-                .setAutoEnterEnabled(autoEnter).setSeamlessResizeEnabled(true).build();
-    }
-
-    private void openCamera() {
-        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.CAMERA}, 10);
+    private void generateImage() {
+        String p = prompt.getText().toString().trim();
+        if (p.isEmpty()) {
+            Toast.makeText(this, "Promptを入力してください", Toast.LENGTH_SHORT).show();
             return;
         }
-        try {
-            CameraManager cm = getSystemService(CameraManager.class);
-            cameraId = chooseCamera(cm);
-            configureTransform(preview.getWidth(), preview.getHeight());
-            cm.openCamera(cameraId, new CameraDevice.StateCallback() {
-                public void onOpened(CameraDevice c) { camera = c; createPreview(); }
-                public void onDisconnected(CameraDevice c) { c.close(); camera = null; }
-                public void onError(CameraDevice c, int e) { c.close(); camera = null; show("カメラを開けません"); }
-            }, cameraHandler);
-        } catch (Exception e) { show("カメラエラー: " + e.getMessage()); }
-    }
-
-    private String chooseCamera(CameraManager cm) throws CameraAccessException {
-        int wanted = front ? CameraCharacteristics.LENS_FACING_FRONT : CameraCharacteristics.LENS_FACING_BACK;
-        for (String id : cm.getCameraIdList()) {
-            Integer facing = cm.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING);
-            if (facing != null && facing == wanted) return id;
+        if (filterSwitch.isChecked() && p.contains("BLOCK_TEST")) {
+            status.setText("Local Filter pathで停止");
+            return;
         }
-        return cm.getCameraIdList()[0];
-    }
 
-    private Surface previewSurface() {
-        SurfaceTexture st = preview.getSurfaceTexture();
-        st.setDefaultBufferSize(videoSize.getWidth(), videoSize.getHeight());
-        return new Surface(st);
-    }
-
-    private void configureTransform(int viewWidth, int viewHeight) {
-        if (viewWidth == 0 || viewHeight == 0) return;
-        Matrix matrix = new Matrix();
-        RectF view = new RectF(0, 0, viewWidth, viewHeight);
-        RectF buffer = new RectF(0, 0, videoSize.getHeight(), videoSize.getWidth());
-        float cx = view.centerX(), cy = view.centerY();
-        buffer.offset(cx - buffer.centerX(), cy - buffer.centerY());
-        matrix.setRectToRect(view, buffer, Matrix.ScaleToFit.FILL);
-        float scale = Math.max((float)viewHeight / videoSize.getHeight(), (float)viewWidth / videoSize.getWidth());
-        matrix.postScale(scale, scale, cx, cy);
-        int rotation = getDisplay() == null ? Surface.ROTATION_90 : getDisplay().getRotation();
-        if (rotation == Surface.ROTATION_90) matrix.postRotate(-90, cx, cy);
-        else if (rotation == Surface.ROTATION_270) matrix.postRotate(90, cx, cy);
-        else if (rotation == Surface.ROTATION_180) matrix.postRotate(180, cx, cy);
-        preview.setTransform(matrix);
-    }
-
-    private void createPreview() {
-        if (camera == null || !preview.isAvailable()) return;
+        int stepValue;
+        int seedValue;
         try {
-            Surface p = previewSurface();
-            camera.createCaptureSession(Collections.singletonList(p), new CameraCaptureSession.StateCallback() {
-                public void onConfigured(CameraCaptureSession s) {
-                    session = s;
-                    try {
-                        CaptureRequest.Builder b = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-                        b.addTarget(p);
-                        b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
-                        session.setRepeatingRequest(b.build(), null, cameraHandler);
-                        show("無音撮影できます");
-                    } catch (Exception e) { show("プレビューエラー"); }
-                }
-                public void onConfigureFailed(CameraCaptureSession s) { show("プレビューを開始できません"); }
-            }, cameraHandler);
-        } catch (Exception e) { show("プレビューエラー: " + e.getMessage()); }
-    }
-
-    private void startRecording() {
-        if (camera == null) return;
-        try {
-            ContentValues cv = new ContentValues();
-            cv.put(MediaStore.Video.Media.DISPLAY_NAME, "SilentPiP_" + System.currentTimeMillis() + ".mp4");
-            cv.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
-            cv.put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/SilentPiPCamera");
-            cv.put(MediaStore.Video.Media.IS_PENDING, 1);
-            pendingVideo = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cv);
-            outputFile = getContentResolver().openFileDescriptor(pendingVideo, "w");
-            FileDescriptor fd = outputFile.getFileDescriptor();
-
-            recorder = new MediaRecorder();
-            recorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
-            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-            recorder.setOutputFile(fd);
-            recorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
-            recorder.setVideoSize(videoSize.getWidth(), videoSize.getHeight());
-            recorder.setVideoFrameRate(30);
-            recorder.setVideoEncodingBitRate(12_000_000);
-            recorder.prepare();
-
-            Surface p = previewSurface();
-            Surface r = recorder.getSurface();
-            session.close();
-            camera.createCaptureSession(Arrays.asList(p, r), new CameraCaptureSession.StateCallback() {
-                public void onConfigured(CameraCaptureSession s) {
-                    session = s;
-                    try {
-                        CaptureRequest.Builder b = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
-                        b.addTarget(p); b.addTarget(r);
-                        b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO);
-                        session.setRepeatingRequest(b.build(), null, cameraHandler);
-                        recorder.start();
-                        recording = true;
-                        runOnUiThread(() -> { record.setText("録画停止"); status.setText("● 無音録画中"); });
-                    } catch (Exception e) { failRecording(e); }
-                }
-                public void onConfigureFailed(CameraCaptureSession s) { failRecording(new Exception("録画設定失敗")); }
-            }, cameraHandler);
-        } catch (Exception e) { failRecording(e); }
-    }
-
-    private void stopRecording() {
-        recording = false;
-        try { if (session != null) session.stopRepeating(); } catch (Exception ignored) {}
-        try { if (recorder != null) recorder.stop(); } catch (Exception ignored) {}
-        if (recorder != null) { recorder.reset(); recorder.release(); recorder = null; }
-        try { if (outputFile != null) outputFile.close(); } catch (Exception ignored) {}
-        outputFile = null;
-        if (pendingVideo != null) {
-            ContentValues cv = new ContentValues(); cv.put(MediaStore.Video.Media.IS_PENDING, 0);
-            getContentResolver().update(pendingVideo, cv, null, null);
-            pendingVideo = null;
+            stepValue = Integer.parseInt(steps.getText().toString().trim());
+            seedValue = Integer.parseInt(seed.getText().toString().trim());
+        } catch (NumberFormatException e) {
+            Toast.makeText(this, "Steps / Seedを確認してください", Toast.LENGTH_SHORT).show();
+            return;
         }
-        runOnUiThread(() -> { record.setText("録画開始"); status.setText("保存しました"); Toast.makeText(this, "動画を保存しました", Toast.LENGTH_SHORT).show(); });
-        createPreview();
+        stepValue = Math.max(1, Math.min(stepValue, 50));
+        final int finalSteps = stepValue;
+
+        generate.setEnabled(false);
+        save.setEnabled(false);
+        status.setText("生成中… " + finalSteps + " steps");
+
+        worker.execute(() -> {
+            try {
+                if (generator == null) initGenerator();
+                ImageGeneratorResult result = generator.generate(p, finalSteps, seedValue);
+                if (result == null || result.generatedImage() == null) {
+                    throw new IllegalStateException("生成結果が空です");
+                }
+                Bitmap bitmap = BitmapExtractor.extract(result.generatedImage());
+                lastBitmap = bitmap;
+                runOnUiThread(() -> {
+                    image.setImageBitmap(bitmap);
+                    status.setText("生成完了");
+                    generate.setEnabled(true);
+                    save.setEnabled(true);
+                });
+            } catch (Throwable t) {
+                runOnUiThread(() -> {
+                    status.setText("生成失敗");
+                    generate.setEnabled(true);
+                    error("生成失敗", t);
+                });
+            }
+        });
     }
 
-    private void failRecording(Exception e) {
-        recording = false;
-        runOnUiThread(() -> show("録画エラー: " + e.getMessage()));
+    private void saveImage() {
+        Bitmap bitmap = lastBitmap;
+        if (bitmap == null) return;
+        worker.execute(() -> {
+            try {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Images.Media.DISPLAY_NAME,
+                        "anatomy_" + System.currentTimeMillis() + ".png");
+                values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+                values.put(MediaStore.Images.Media.RELATIVE_PATH,
+                        Environment.DIRECTORY_PICTURES + "/AnatomyDiffusion");
+                Uri uri = getContentResolver().insert(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                if (uri == null) throw new IllegalStateException("保存先作成失敗");
+                try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                    if (out == null || !bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
+                        throw new IllegalStateException("PNG保存失敗");
+                    }
+                }
+                runOnUiThread(() ->
+                        Toast.makeText(this, "画像を保存しました", Toast.LENGTH_LONG).show());
+            } catch (Throwable t) {
+                runOnUiThread(() -> error("保存失敗", t));
+            }
+        });
     }
 
-    private void closeCamera() {
-        if (session != null) { session.close(); session = null; }
-        if (camera != null) { camera.close(); camera = null; }
+    private void updateModelInfo() {
+        modelInfo.setText(modelDir == null ? "MODEL: 未読込" :
+                "MODEL: " + modelDir.getAbsolutePath());
     }
 
-    private void show(String s) { runOnUiThread(() -> status.setText(s)); }
+    private void closeGenerator() {
+        ImageGenerator g = generator;
+        generator = null;
+        if (g != null) {
+            try { g.close(); } catch (Throwable ignored) {}
+        }
+    }
 
-    @Override public void onRequestPermissionsResult(int req, String[] p, int[] g) {
-        super.onRequestPermissionsResult(req, p, g);
-        if (req == 10 && g.length > 0 && g[0] == PackageManager.PERMISSION_GRANTED) openCamera();
+    private void error(String title, Throwable t) {
+        String msg = t.getClass().getSimpleName() + ": " +
+                (t.getMessage() == null ? "(no message)" : t.getMessage());
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(msg)
+                .setPositiveButton("OK", null)
+                .show();
+    }
+
+    private static void deleteTree(File f) {
+        if (f == null || !f.exists()) return;
+        if (f.isDirectory()) {
+            File[] c = f.listFiles();
+            if (c != null) for (File x : c) deleteTree(x);
+        }
+        f.delete();
+    }
+
+    private TextView label(String s, int size, boolean bold) {
+        TextView v = new TextView(this);
+        v.setText(s);
+        v.setTextSize(size);
+        v.setPadding(0, dp(4), 0, dp(4));
+        if (bold) v.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        return v;
+    }
+
+    private LinearLayout.LayoutParams full() {
+        return new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+    }
+
+    private void space(LinearLayout root, int amount) {
+        View v = new View(this);
+        root.addView(v, new LinearLayout.LayoutParams(1, dp(amount)));
+    }
+
+    private int dp(int n) {
+        return Math.round(n * getResources().getDisplayMetrics().density);
+    }
+
+    @Override
+    protected void onDestroy() {
+        closeGenerator();
+        worker.shutdownNow();
+        super.onDestroy();
     }
 }
