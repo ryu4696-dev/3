@@ -11,12 +11,14 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -42,6 +44,8 @@ public class MainActivity extends Activity {
     private EditText steps;
     private EditText seed;
     private CheckBox filterSwitch;
+    private CheckBox promptAssistSwitch;
+    private Spinner outputSize;
     private TextView status;
     private TextView modelInfo;
     private ImageView image;
@@ -92,6 +96,26 @@ public class MainActivity extends Activity {
         negativePrompt.setHint("Negative Prompt（現在のMediaPipe backendでは未使用）");
         negativePrompt.setMinLines(2);
         root.addView(negativePrompt, full());
+
+        promptAssistSwitch = new CheckBox(this);
+        promptAssistSwitch.setText("Prompt Assist（日本語の構図・人物・背景を補助）");
+        promptAssistSwitch.setChecked(true);
+        root.addView(promptAssistSwitch, full());
+
+        TextView outputLabel = label("出力サイズ", 13, true);
+        root.addView(outputLabel, full());
+        outputSize = new Spinner(this);
+        ArrayAdapter<String> outputAdapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_spinner_item,
+                new String[]{
+                        "1920 x 1920（正方形）",
+                        "1920 x 1080（横 / Full HD）",
+                        "1080 x 1920（縦 / Full HD）"
+                });
+        outputAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        outputSize.setAdapter(outputAdapter);
+        root.addView(outputSize, full());
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -148,7 +172,7 @@ public class MainActivity extends Activity {
         root.addView(save, full());
 
         TextView footer = label(
-                "モデル本体はAPKに含みません。変換済みMediaPipe Image GeneratorモデルをZIPで読み込んで端末内に展開します。",
+                "モデル本体はAPKに含みません。変換済みMediaPipe Image GeneratorモデルをZIPで読み込み、生成は端末内で実行します。生成後は選択サイズへ高品質リサイズして保存します。",
                 12, false);
         footer.setAlpha(.65f);
         root.addView(footer, full());
@@ -293,6 +317,10 @@ public class MainActivity extends Activity {
             return;
         }
 
+        final String effectivePrompt = promptAssistSwitch.isChecked()
+                ? enhancePrompt(p)
+                : p;
+
         int stepValue;
         int seedValue;
         try {
@@ -312,15 +340,19 @@ public class MainActivity extends Activity {
         worker.execute(() -> {
             try {
                 if (generator == null) initGenerator();
-                ImageGeneratorResult result = generator.generate(p, finalSteps, seedValue);
+                ImageGeneratorResult result = generator.generate(effectivePrompt, finalSteps, seedValue);
                 if (result == null || result.generatedImage() == null) {
                     throw new IllegalStateException("生成結果が空です");
                 }
                 Bitmap bitmap = BitmapExtractor.extract(result.generatedImage());
-                lastBitmap = bitmap;
+                Bitmap exported = exportBitmap(bitmap);
+                if (exported != bitmap && !bitmap.isRecycled()) {
+                    bitmap.recycle();
+                }
+                lastBitmap = exported;
                 runOnUiThread(() -> {
-                    image.setImageBitmap(bitmap);
-                    status.setText("生成完了");
+                    image.setImageBitmap(exported);
+                    status.setText("生成完了 • " + exported.getWidth() + " x " + exported.getHeight());
                     generate.setEnabled(true);
                     save.setEnabled(true);
                 });
@@ -332,6 +364,79 @@ public class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+    private String enhancePrompt(String input) {
+        StringBuilder extra = new StringBuilder();
+
+        if (input.contains("日本人")) extra.append(", Japanese");
+        if (input.contains("女性") || input.contains("女の子") || input.contains("美女")) extra.append(", adult woman");
+        if (input.contains("男性") || input.contains("男")) extra.append(", adult man");
+        if (input.contains("黒髪")) extra.append(", black hair");
+        if (input.contains("白髪")) extra.append(", white hair");
+        if (input.contains("金髪")) extra.append(", blonde hair");
+        if (input.contains("座") ) extra.append(", sitting pose");
+        if (input.contains("立") ) extra.append(", standing pose");
+        if (input.contains("横顔")) extra.append(", profile view");
+        if (input.contains("正面")) extra.append(", front view");
+        if (input.contains("斜め")) extra.append(", three-quarter view");
+        if (input.contains("見上げ") || input.contains("下から")) extra.append(", low angle");
+        if (input.contains("見下ろし") || input.contains("上から")) extra.append(", high angle");
+        if (input.contains("笑")) extra.append(", gentle smile");
+        if (input.contains("砂浜") || input.contains("ビーチ")) extra.append(", beach");
+        if (input.contains("海")) extra.append(", ocean background");
+        if (input.contains("夏")) extra.append(", summer");
+        if (input.contains("夜")) extra.append(", night scene");
+        if (input.contains("雨")) extra.append(", rainy atmosphere");
+        if (input.contains("室内")) extra.append(", indoor scene");
+
+        boolean illustration = input.contains("アニメ") ||
+                input.contains("イラスト") ||
+                input.toLowerCase().contains("anime");
+
+        if (illustration) {
+            extra.append(", high detail illustration, clean composition, coherent anatomy, detailed hands, balanced proportions");
+        } else {
+            extra.append(", highly detailed, coherent composition, natural anatomy, detailed hands, realistic proportions, natural lighting, sharp focus");
+        }
+
+        return input + extra;
+    }
+
+    private Bitmap exportBitmap(Bitmap src) {
+        int targetW = 1920;
+        int targetH = 1920;
+        int selected = outputSize == null ? 0 : outputSize.getSelectedItemPosition();
+        if (selected == 1) {
+            targetW = 1920;
+            targetH = 1080;
+        } else if (selected == 2) {
+            targetW = 1080;
+            targetH = 1920;
+        }
+
+        float srcAspect = src.getWidth() / (float) src.getHeight();
+        float targetAspect = targetW / (float) targetH;
+
+        int cropW = src.getWidth();
+        int cropH = src.getHeight();
+        int x = 0;
+        int y = 0;
+
+        if (srcAspect > targetAspect) {
+            cropW = Math.max(1, Math.round(src.getHeight() * targetAspect));
+            x = Math.max(0, (src.getWidth() - cropW) / 2);
+        } else if (srcAspect < targetAspect) {
+            cropH = Math.max(1, Math.round(src.getWidth() / targetAspect));
+            y = Math.max(0, (src.getHeight() - cropH) / 2);
+        }
+
+        Bitmap cropped = Bitmap.createBitmap(src, x, y, cropW, cropH);
+        Bitmap scaled = Bitmap.createScaledBitmap(cropped, targetW, targetH, true);
+        if (cropped != src && cropped != scaled && !cropped.isRecycled()) {
+            cropped.recycle();
+        }
+        return scaled;
     }
 
     private void saveImage() {
