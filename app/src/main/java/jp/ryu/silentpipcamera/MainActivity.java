@@ -26,10 +26,14 @@ import com.google.mediapipe.framework.image.BitmapExtractor;
 import com.google.mediapipe.tasks.vision.imagegenerator.ImageGenerator;
 import com.google.mediapipe.tasks.vision.imagegenerator.ImageGeneratorResult;
 
+import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.zip.ZipEntry;
@@ -37,6 +41,10 @@ import java.util.zip.ZipInputStream;
 
 public class MainActivity extends Activity {
     private static final int PICK_MODEL = 7001;
+    private static final String[] MODEL_URLS = new String[] {
+            "https://github.com/ShiftHackZ/Local-Diffusion-Models-SDAI-MediaPipe/releases/download/patch-26082024/stable-diffusion-v1-5.zip",
+            "https://sdai-models.moroz.cc/SDAI/MediaPipe/stable-diffusion-v1-5.zip"
+    };
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
 
     private EditText prompt;
@@ -62,7 +70,12 @@ public class MainActivity extends Activity {
         modelDir = findInstalledModel();
         setContentView(buildUi());
         updateModelInfo();
-        if (modelDir != null) initAsync();
+        generate.setEnabled(false);
+        if (modelDir != null) {
+            initAsync();
+        } else {
+            autoInstallModel();
+        }
     }
 
     private View buildUi() {
@@ -82,8 +95,8 @@ public class MainActivity extends Activity {
         root.addView(modelInfo, full());
 
         Button importModel = new Button(this);
-        importModel.setText("モデルZIPを読み込む");
-        importModel.setOnClickListener(v -> pickModel());
+        importModel.setText("モデルを再セットアップ");
+        importModel.setOnClickListener(v -> autoInstallModel());
         root.addView(importModel, full());
 
         prompt = new EditText(this);
@@ -172,11 +185,181 @@ public class MainActivity extends Activity {
         root.addView(save, full());
 
         TextView footer = label(
-                "モデル本体はAPKに含みません。変換済みMediaPipe Image GeneratorモデルをZIPで読み込み、生成は端末内で実行します。生成後は選択サイズへ高品質リサイズして保存します。",
+                "初回起動時に画像生成モデル（約1.9GB）を自動取得します。取得後の生成処理は端末内で実行します。生成後は選択サイズへ高品質リサイズして保存します。",
                 12, false);
         footer.setAlpha(.65f);
         root.addView(footer, full());
         return scroll;
+    }
+
+
+    private void autoInstallModel() {
+        generate.setEnabled(false);
+        save.setEnabled(false);
+        status.setText("モデル準備中… 初回のみ約1.9GBダウンロードします");
+        worker.execute(() -> {
+            File zipFile = new File(getCacheDir(), "stable-diffusion-v1-5.zip");
+            File root = new File(getFilesDir(), "image_generator_model");
+            Throwable lastError = null;
+            try {
+                closeGenerator();
+                if (root.exists()) deleteTree(root);
+                if (!root.mkdirs() && !root.isDirectory()) {
+                    throw new IllegalStateException("モデル保存フォルダを作成できません");
+                }
+
+                boolean downloaded = false;
+                for (String source : MODEL_URLS) {
+                    try {
+                        downloadModel(source, zipFile);
+                        downloaded = true;
+                        break;
+                    } catch (Throwable t) {
+                        lastError = t;
+                        if (zipFile.exists()) zipFile.delete();
+                    }
+                }
+                if (!downloaded) {
+                    throw new IllegalStateException(
+                            "モデルの自動取得に失敗しました",
+                            lastError);
+                }
+
+                runOnUiThread(() -> status.setText("モデル展開中…"));
+                unzipModel(zipFile, root);
+                zipFile.delete();
+
+                modelDir = detectModelDir(root);
+                runOnUiThread(() -> {
+                    updateModelInfo();
+                    status.setText("モデル初期化中…");
+                });
+
+                initGenerator();
+                runOnUiThread(() -> {
+                    status.setText("準備完了");
+                    generate.setEnabled(true);
+                });
+            } catch (Throwable t) {
+                runOnUiThread(() -> {
+                    status.setText("モデル準備失敗");
+                    generate.setEnabled(false);
+                    error("モデル準備失敗", t);
+                });
+            } finally {
+                if (zipFile.exists()) zipFile.delete();
+            }
+        });
+    }
+
+    private void downloadModel(String source, File target) throws Exception {
+        HttpURLConnection connection = openFollowingRedirects(source);
+        connection.setConnectTimeout(30000);
+        connection.setReadTimeout(60000);
+        connection.connect();
+
+        int code = connection.getResponseCode();
+        if (code < 200 || code >= 300) {
+            connection.disconnect();
+            throw new IllegalStateException("HTTP " + code);
+        }
+
+        final long total = connection.getContentLengthLong();
+        long done = 0L;
+        int lastPercent = -1;
+        byte[] buffer = new byte[1024 * 1024];
+
+        try (InputStream in = new BufferedInputStream(connection.getInputStream());
+             OutputStream out = new FileOutputStream(target)) {
+            int n;
+            while ((n = in.read(buffer)) >= 0) {
+                if (n == 0) continue;
+                out.write(buffer, 0, n);
+                done += n;
+
+                if (total > 0) {
+                    int percent = (int) Math.min(100L, (done * 100L) / total);
+                    if (percent != lastPercent) {
+                        lastPercent = percent;
+                        final int p = percent;
+                        final long mb = done / (1024L * 1024L);
+                        final long totalMb = total / (1024L * 1024L);
+                        runOnUiThread(() ->
+                                status.setText("モデル取得中… " + p + "%  (" +
+                                        mb + " / " + totalMb + " MB)"));
+                    }
+                } else {
+                    final long mb = done / (1024L * 1024L);
+                    runOnUiThread(() ->
+                            status.setText("モデル取得中… " + mb + " MB"));
+                }
+            }
+        } finally {
+            connection.disconnect();
+        }
+
+        if (!target.isFile() || target.length() < 100L * 1024L * 1024L) {
+            throw new IllegalStateException("モデルファイルが不完全です");
+        }
+    }
+
+    private HttpURLConnection openFollowingRedirects(String source) throws Exception {
+        URL url = new URL(source);
+        for (int i = 0; i < 8; i++) {
+            HttpURLConnection c = (HttpURLConnection) url.openConnection();
+            c.setInstanceFollowRedirects(false);
+            c.setRequestProperty("User-Agent", "AnatomyDiffusion/0.2.1");
+            c.setConnectTimeout(30000);
+            c.setReadTimeout(60000);
+
+            int code = c.getResponseCode();
+            if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+                String location = c.getHeaderField("Location");
+                c.disconnect();
+                if (location == null || location.isEmpty()) {
+                    throw new IllegalStateException("リダイレクト先がありません");
+                }
+                url = new URL(url, location);
+                continue;
+            }
+            return c;
+        }
+        throw new IllegalStateException("リダイレクト回数が多すぎます");
+    }
+
+    private void unzipModel(File zipFile, File root) throws Exception {
+        try (ZipInputStream zip = new ZipInputStream(
+                new BufferedInputStream(new FileInputStream(zipFile)))) {
+            ZipEntry entry;
+            byte[] buf = new byte[1024 * 1024];
+            String safeRoot = root.getCanonicalPath() + File.separator;
+
+            while ((entry = zip.getNextEntry()) != null) {
+                File out = new File(root, entry.getName());
+                String canonical = out.getCanonicalPath();
+                if (!canonical.startsWith(safeRoot)) {
+                    throw new IllegalStateException("ZIP内パスが不正です");
+                }
+
+                if (entry.isDirectory()) {
+                    if (!out.mkdirs() && !out.isDirectory()) {
+                        throw new IllegalStateException("フォルダ作成失敗");
+                    }
+                } else {
+                    File parent = out.getParentFile();
+                    if (parent != null && !parent.mkdirs() && !parent.isDirectory()) {
+                        throw new IllegalStateException("フォルダ作成失敗");
+                    }
+                    try (OutputStream os = new FileOutputStream(out)) {
+                        int n;
+                        while ((n = zip.read(buf)) > 0) {
+                            os.write(buf, 0, n);
+                        }
+                    }
+                }
+                zip.closeEntry();
+            }
+        }
     }
 
     private void pickModel() {
