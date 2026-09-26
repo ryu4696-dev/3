@@ -48,7 +48,22 @@ public final class BlueRouteAnalyzer {
                         r < 180 &&
                         b - r > 35;
 
-                if (googleBlue || paleBlue) {
+                // Current Google Maps navigation route is often indigo/purple.
+                boolean googleIndigo =
+                        b > 120 &&
+                        r >= 20 &&
+                        r < 170 &&
+                        g < 120 &&
+                        b - r > 45 &&
+                        b - g > 70;
+
+                boolean deepPurple =
+                        b > 105 &&
+                        r > g + 10 &&
+                        b > r + 30 &&
+                        g < 95;
+
+                if (googleBlue || paleBlue || googleIndigo || deepPurple) {
                     sumX += x;
                     count++;
                 }
