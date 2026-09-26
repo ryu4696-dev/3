@@ -345,114 +345,463 @@ public final class CameraArView extends FrameLayout {
     }
 
     private static final class RouteOverlay extends View {
-        private final Paint outline = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint route = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint arrow = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint glowOuter = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint glowMid = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint ribbon = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint core = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint chevronGlow = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint chevron = new Paint(Paint.ANTI_ALIAS_FLAG);
 
         RouteOverlay(Context context) {
             super(context);
             setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
-            outline.setColor(Color.argb(205, 15, 20, 38));
-            outline.setStyle(Paint.Style.STROKE);
-            outline.setStrokeCap(Paint.Cap.ROUND);
-            outline.setStrokeJoin(Paint.Join.ROUND);
+            glowOuter.setStyle(Paint.Style.FILL);
+            glowOuter.setColor(Color.argb(28, 70, 210, 255));
 
-            route.setColor(Color.argb(225, 45, 115, 255));
-            route.setStyle(Paint.Style.STROKE);
-            route.setStrokeCap(Paint.Cap.ROUND);
-            route.setStrokeJoin(Paint.Join.ROUND);
+            glowMid.setStyle(Paint.Style.FILL);
+            glowMid.setColor(Color.argb(58, 35, 170, 255));
 
-            arrow.setColor(Color.argb(240, 170, 215, 255));
-            arrow.setStyle(Paint.Style.FILL);
+            ribbon.setStyle(Paint.Style.FILL);
+
+            core.setStyle(Paint.Style.STROKE);
+            core.setStrokeCap(Paint.Cap.ROUND);
+            core.setStrokeJoin(Paint.Join.ROUND);
+            core.setColor(Color.argb(175, 210, 245, 255));
+
+            chevronGlow.setStyle(Paint.Style.STROKE);
+            chevronGlow.setStrokeCap(Paint.Cap.ROUND);
+            chevronGlow.setStrokeJoin(Paint.Join.ROUND);
+            chevronGlow.setColor(Color.argb(72, 25, 170, 255));
+
+            chevron.setStyle(Paint.Style.STROKE);
+            chevron.setStrokeCap(Paint.Cap.ROUND);
+            chevron.setStrokeJoin(Paint.Join.ROUND);
+            chevron.setColor(Color.argb(245, 105, 215, 255));
         }
 
-        @Override protected void onDraw(Canvas canvas) {
+        @Override
+        protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
 
-            NavigationState nav = NavigationState.get();
-            List<NavigationState.RoutePoint> points = nav.getRoute();
-            if (points == null || points.size() < 4) return;
+            final NavigationState nav = NavigationState.get();
+            final List<NavigationState.RoutePoint> routePoints = nav.getRoute();
 
-            float w = getWidth();
-            float h = getHeight();
-            if (w < 10 || h < 10) return;
+            if (routePoints == null || routePoints.size() < 6) return;
+            if (nav.routeConfidence < 0.10f) return;
 
-            float roll = clamp(nav.imuRollDeg / 45f, -0.8f, 0.8f);
-            float pitch = clamp(nav.imuPitchDeg / 60f, -0.45f, 0.45f);
-            float lane = clamp(nav.laneCenterOffset, -0.7f, 0.7f);
+            final float w = getWidth();
+            final float h = getHeight();
+            if (w < 80f || h < 120f) return;
+
+            long now = SystemClock.elapsedRealtime();
+
+            float roadConfidence = nav.roadConfidence;
+            if (now - nav.roadUpdatedAtMs > 2200L) {
+                roadConfidence *= 0.30f;
+            }
+
+            boolean moving = nav.speedMps > 0.80f;
+
+            // If the camera does not look like a road and the vehicle is not moving,
+            // do not paste a route onto walls / ceilings / furniture.
+            if (!moving && roadConfidence < 0.15f) return;
+
+            float roadMix = clamp(
+                    (roadConfidence - 0.08f) / 0.42f,
+                    0f,
+                    1f);
+
+            float horizonNorm = lerp(
+                    0.43f,
+                    clamp(nav.roadHorizonY, 0.27f, 0.64f),
+                    roadMix);
+
+            float pitch = clamp(
+                    nav.imuPitchDeg / 90f,
+                    -0.55f,
+                    0.55f);
+
+            float horizonY =
+                    h * horizonNorm +
+                    pitch * h * 0.045f;
+
+            horizonY = clamp(
+                    horizonY,
+                    h * 0.25f,
+                    h * 0.66f);
+
+            float bottomY = h * 0.965f;
+
+            float vanishX =
+                    w * 0.5f +
+                    nav.roadVanishX * w * 0.48f * roadMix;
+
+            float anchorX =
+                    w * 0.5f +
+                    nav.laneCenterOffset * w * 0.11f * roadMix;
+
+            float roll = clamp(
+                    nav.imuRollDeg / 45f,
+                    -0.85f,
+                    0.85f);
+
+            ArrayList<PointF> centers = new ArrayList<>();
+            ArrayList<Float> halfWidths = new ArrayList<>();
+
+            float startLat = routePoints.get(0).lateral;
+            float previousCurve = 0f;
+
+            for (NavigationState.RoutePoint rp : routePoints) {
+                float t = clamp(rp.progress, 0f, 1f);
+
+                // Perspective: large separation near the car, compressed at the horizon.
+                float p =
+                        1f -
+                        (float)Math.pow(1f - t, 1.62f);
+
+                float y =
+                        bottomY -
+                        (bottomY - horizonY) * p;
+
+                float baseX =
+                        lerp(anchorX, vanishX, p);
+
+                float rawCurve =
+                        rp.lateral - startLat;
+
+                float curve =
+                        previousCurve * 0.42f +
+                        rawCurve * 0.58f;
+
+                previousCurve = curve;
+
+                float curveScale =
+                        w * (0.055f + 0.285f * p);
+
+                float x =
+                        baseX +
+                        curve * curveScale;
+
+                x +=
+                        roll *
+                        (bottomY - y) *
+                        0.070f;
+
+                centers.add(new PointF(x, y));
+
+                float nearRoadHalf =
+                        clamp(
+                                nav.roadNearHalfWidth * w * 0.30f,
+                                w * 0.050f,
+                                w * 0.115f);
+
+                float nearHalf =
+                        lerp(w * 0.085f, nearRoadHalf, roadMix);
+
+                float farHalf =
+                        Math.max(3.5f, w * 0.009f);
+
+                float hw =
+                        lerp(
+                                nearHalf,
+                                farHalf,
+                                (float)Math.pow(p, 0.90f));
+
+                halfWidths.add(hw);
+            }
+
+            if (centers.size() < 5) return;
+
+            Path outer =
+                    buildRibbon(
+                            centers,
+                            halfWidths,
+                            2.15f);
+
+            Path mid =
+                    buildRibbon(
+                            centers,
+                            halfWidths,
+                            1.52f);
+
+            Path main =
+                    buildRibbon(
+                            centers,
+                            halfWidths,
+                            1.00f);
+
+            float visibility =
+                    moving
+                            ? clamp(0.72f + roadConfidence * 0.38f, 0.72f, 1f)
+                            : clamp(0.55f + roadConfidence * 0.72f, 0.55f, 1f);
+
+            glowOuter.setAlpha((int)(34f * visibility));
+            glowMid.setAlpha((int)(70f * visibility));
+
+            ribbon.setAlpha((int)(210f * visibility));
+            ribbon.setShader(
+                    new LinearGradient(
+                            0f,
+                            bottomY,
+                            0f,
+                            horizonY,
+                            new int[]{
+                                    Color.argb(178, 50, 210, 255),
+                                    Color.argb(205, 25, 145, 255),
+                                    Color.argb(232, 70, 115, 255)
+                            },
+                            new float[]{0f, 0.52f, 1f},
+                            Shader.TileMode.CLAMP));
+
+            canvas.drawPath(outer, glowOuter);
+            canvas.drawPath(mid, glowMid);
+            canvas.drawPath(main, ribbon);
+
+            ribbon.setShader(null);
+
+            Path centerLine = buildSmoothCenterline(centers);
+            core.setStrokeWidth(
+                    Math.max(2.0f, w * 0.0065f));
+            core.setAlpha((int)(145f * visibility));
+            canvas.drawPath(centerLine, core);
+
+            drawChevrons(
+                    canvas,
+                    centers,
+                    halfWidths,
+                    visibility);
+        }
+
+        private void drawChevrons(
+                Canvas canvas,
+                ArrayList<PointF> centers,
+                ArrayList<Float> halfWidths,
+                float visibility) {
+
+            if (centers.size() < 8) return;
+
+            float[] fractions = {
+                    0.17f,
+                    0.30f,
+                    0.43f,
+                    0.57f,
+                    0.70f
+            };
+
+            for (int n = 0; n < fractions.length; n++) {
+                int idx =
+                        clamp(
+                                Math.round(
+                                        fractions[n] *
+                                        (centers.size() - 1)),
+                                2,
+                                centers.size() - 3);
+
+                PointF prev = centers.get(idx - 1);
+                PointF c = centers.get(idx);
+                PointF next = centers.get(idx + 1);
+
+                float dx = next.x - prev.x;
+                float dy = next.y - prev.y;
+                float len =
+                        (float)Math.sqrt(
+                                dx * dx +
+                                dy * dy);
+
+                if (len < 1f) continue;
+
+                dx /= len;
+                dy /= len;
+
+                float nx = -dy;
+                float ny = dx;
+
+                float size =
+                        Math.max(
+                                halfWidths.get(idx) * 2.0f,
+                                getWidth() * 0.030f);
+
+                float tipX =
+                        c.x + dx * size * 0.80f;
+                float tipY =
+                        c.y + dy * size * 0.80f;
+
+                float backX =
+                        c.x - dx * size * 0.62f;
+                float backY =
+                        c.y - dy * size * 0.62f;
+
+                float wing =
+                        size * 0.82f;
+
+                Path v = new Path();
+                v.moveTo(
+                        backX + nx * wing,
+                        backY + ny * wing);
+                v.lineTo(tipX, tipY);
+                v.lineTo(
+                        backX - nx * wing,
+                        backY - ny * wing);
+
+                chevronGlow.setStrokeWidth(
+                        Math.max(
+                                9f,
+                                size * 0.46f));
+
+                chevron.setStrokeWidth(
+                        Math.max(
+                                4f,
+                                size * 0.23f));
+
+                chevronGlow.setAlpha(
+                        (int)(90f * visibility));
+
+                chevron.setAlpha(
+                        (int)(245f * visibility));
+
+                canvas.drawPath(v, chevronGlow);
+                canvas.drawPath(v, chevron);
+            }
+        }
+
+        private static Path buildSmoothCenterline(
+                ArrayList<PointF> pts) {
 
             Path p = new Path();
-            boolean first = true;
+            if (pts.isEmpty()) return p;
 
-            ArrayList<PointF> screen = new ArrayList<>();
+            p.moveTo(
+                    pts.get(0).x,
+                    pts.get(0).y);
 
-            for (NavigationState.RoutePoint rp : points) {
-                float t = clamp(rp.progress, 0f, 1f);
-                float perspective = (float)Math.pow(t, 0.72);
+            for (int i = 1; i < pts.size() - 1; i++) {
+                PointF a = pts.get(i);
+                PointF b = pts.get(i + 1);
 
-                float y = h * (0.90f - perspective * 0.66f);
-                y += pitch * h * (0.05f + 0.05f * t);
+                float mx =
+                        (a.x + b.x) * 0.5f;
+                float my =
+                        (a.y + b.y) * 0.5f;
 
-                float spread = w * (0.42f - 0.22f * t);
-                float x = w * 0.5f +
-                        rp.lateral * spread +
-                        lane * w * 0.12f;
+                p.quadTo(
+                        a.x,
+                        a.y,
+                        mx,
+                        my);
+            }
 
-                x += roll * (h * 0.55f - y) * 0.20f;
+            PointF last =
+                    pts.get(pts.size() - 1);
 
-                screen.add(new PointF(x, y));
+            p.lineTo(last.x, last.y);
 
-                if (first) {
-                    p.moveTo(x, y);
-                    first = false;
-                } else {
-                    p.lineTo(x, y);
+            return p;
+        }
+
+        private static Path buildRibbon(
+                ArrayList<PointF> centers,
+                ArrayList<Float> halfWidths,
+                float widthScale) {
+
+            int n = centers.size();
+
+            ArrayList<PointF> left =
+                    new ArrayList<>(n);
+
+            ArrayList<PointF> right =
+                    new ArrayList<>(n);
+
+            for (int i = 0; i < n; i++) {
+                PointF prev =
+                        centers.get(
+                                Math.max(0, i - 1));
+
+                PointF next =
+                        centers.get(
+                                Math.min(n - 1, i + 1));
+
+                float dx =
+                        next.x - prev.x;
+
+                float dy =
+                        next.y - prev.y;
+
+                float len =
+                        (float)Math.sqrt(
+                                dx * dx +
+                                dy * dy);
+
+                if (len < 0.001f) {
+                    dx = 0f;
+                    dy = -1f;
+                    len = 1f;
                 }
+
+                dx /= len;
+                dy /= len;
+
+                float nx = -dy;
+                float ny = dx;
+
+                float hw =
+                        halfWidths.get(i) *
+                        widthScale;
+
+                PointF c = centers.get(i);
+
+                left.add(
+                        new PointF(
+                                c.x + nx * hw,
+                                c.y + ny * hw));
+
+                right.add(
+                        new PointF(
+                                c.x - nx * hw,
+                                c.y - ny * hw));
             }
 
-            float base = Math.max(16f, w * 0.055f);
-            outline.setStrokeWidth(base + Math.max(8f, w * 0.020f));
-            route.setStrokeWidth(base);
+            Path path = new Path();
 
-            canvas.drawPath(p, outline);
-            canvas.drawPath(p, route);
+            PointF first = left.get(0);
+            path.moveTo(first.x, first.y);
 
-            if (screen.size() >= 7) {
-                int idx = Math.min(screen.size() - 2, Math.max(3, screen.size() / 3));
-                PointF a = screen.get(idx - 1);
-                PointF b = screen.get(idx + 1);
-                drawArrow(canvas, a, b, Math.max(18f, w * 0.05f));
+            for (int i = 1; i < left.size(); i++) {
+                PointF p = left.get(i);
+                path.lineTo(p.x, p.y);
             }
+
+            for (int i = right.size() - 1; i >= 0; i--) {
+                PointF p = right.get(i);
+                path.lineTo(p.x, p.y);
+            }
+
+            path.close();
+
+            return path;
         }
 
-        private void drawArrow(Canvas c, PointF a, PointF b, float size) {
-            float dx = b.x - a.x;
-            float dy = b.y - a.y;
-            float len = (float)Math.sqrt(dx * dx + dy * dy);
-            if (len < 1f) return;
+        private static float lerp(
+                float a,
+                float b,
+                float t) {
 
-            dx /= len;
-            dy /= len;
-
-            float px = -dy;
-            float py = dx;
-
-            float tx = b.x;
-            float ty = b.y;
-
-            Path tri = new Path();
-            tri.moveTo(tx + dx * size, ty + dy * size);
-            tri.lineTo(tx - dx * size * 0.8f + px * size * 0.7f,
-                    ty - dy * size * 0.8f + py * size * 0.7f);
-            tri.lineTo(tx - dx * size * 0.8f - px * size * 0.7f,
-                    ty - dy * size * 0.8f - py * size * 0.7f);
-            tri.close();
-
-            c.drawPath(tri, arrow);
+            return a + (b - a) * t;
         }
 
-        private static float clamp(float v, float lo, float hi) {
+        private static int clamp(
+                int v,
+                int lo,
+                int hi) {
+
+            return Math.max(lo, Math.min(hi, v));
+        }
+
+        private static float clamp(
+                float v,
+                float lo,
+                float hi) {
+
             return Math.max(lo, Math.min(hi, v));
         }
     }
