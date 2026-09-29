@@ -3,6 +3,7 @@ name: Build Noct-Q Android Probe
 on:
   push:
     branches: [ noct-q-android ]
+    paths: [ '.github/workflows/noct-q-probe.yml' ]
   workflow_dispatch:
 
 jobs:
