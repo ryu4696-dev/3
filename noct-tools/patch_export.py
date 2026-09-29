@@ -159,5 +159,35 @@ new = '''    else:
 if old not in s:
     raise SystemExit("weight-provider block not found")
 s = s.replace(old, new, 1)
+
+# qwen_image21_mnn.py also imports utils.custom_op only while exporting ONNX.
+# The public libQwenImage21 clone omits that developer utility, so materialize
+# the minimal FakeLinear op it needs.
+utils_dir = p.parent / "utils"
+utils_dir.mkdir(exist_ok=True)
+(utils_dir / "__init__.py").write_text("")
+(utils_dir / "custom_op.py").write_text(r"""
+import torch
+
+class FakeLinearOp(torch.autograd.Function):
+    @staticmethod
+    def symbolic(g, input, in_features, out_features, has_bias, name):
+        kwargs = {
+            "in_features_i": in_features,
+            "out_features_i": out_features,
+            "has_bias_i": has_bias,
+            "name_s": name,
+        }
+        from torch.onnx.symbolic_helper import _get_tensor_sizes
+        sizes = _get_tensor_sizes(input)
+        out_sizes = (sizes[:-1] if sizes is not None else []) + [out_features]
+        output_type = input.type().with_sizes(out_sizes)
+        return g.op("LlmExporter::FakeLinear", input, **kwargs).setType(output_type)
+
+    @staticmethod
+    def forward(ctx, input, in_features, out_features, has_bias, name):
+        return input.new_zeros(list(input.shape)[:-1] + [out_features])
+""")
+
 p.write_text(s)
 print("patched", p)
