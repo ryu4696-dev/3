@@ -5,6 +5,59 @@ from pathlib import Path
 p = Path(sys.argv[1])
 s = p.read_text()
 
+# libQwenImage21's exporter references a utility from its developer-only ref tree.
+# The public clone does not include that tree, so provide the exact 4/8-bit
+# asymmetric quantization needed by this exporter locally.
+s = s.replace(
+    "from utils.torch_utils import quant as torch_quant",
+    r"""
+def torch_quant(weight, quant_bit, quant_block, symmetric, awq, hqq):
+    if hqq:
+        raise RuntimeError("HQQ is not used by the Noct-Q exporter")
+    oc, ic = weight.shape
+    block_size = ic if quant_block == 0 else quant_block
+    while ic % block_size != 0:
+        block_size //= 2
+    block_num = ic // block_size
+    offset = 1 << (quant_bit - 1)
+    clip_max = offset - 1
+    w = weight.float().reshape(oc, block_num, block_size)
+
+    if symmetric:
+        clip_min = -clip_max
+        abs_max = torch.amax(torch.abs(w), dim=-1, keepdim=True)
+        scale = abs_max / clip_max
+        safe = torch.where(scale == 0, torch.ones_like(scale), scale)
+        q = torch.round(w / safe).clamp(clip_min, clip_max)
+        q = (q.flatten() + offset).to(torch.uint8)
+        alpha = scale.flatten()
+    else:
+        clip_min = -offset
+        max_val = torch.amax(w, dim=-1, keepdim=True)
+        min_val = torch.amin(w, dim=-1, keepdim=True)
+        scale = (max_val - min_val) / (clip_max - clip_min)
+        safe = torch.where(scale == 0, torch.ones_like(scale), scale)
+        if awq:
+            q = torch.round(w / safe) - torch.round(min_val / safe) + clip_min
+            zeros = (torch.round(min_val / safe) - clip_min) * safe
+        else:
+            q = torch.round((w - min_val) / safe) + clip_min
+            zeros = min_val - safe * clip_min
+        q = (q.clamp(clip_min, clip_max).flatten() + offset).to(torch.uint8)
+        # Preserve constant blocks exactly: zero scale + constant as zero-point.
+        zeros = torch.where(scale == 0, min_val, zeros)
+        alpha = torch.stack([zeros.flatten(), scale.flatten()], dim=-1).flatten()
+
+    if quant_bit == 8:
+        return q.cpu(), alpha.float().cpu()
+    if quant_bit == 4:
+        q = q.reshape(-1, 2)
+        packed = ((q[:, 0] << 4) | q[:, 1]).to(torch.uint8)
+        return packed.cpu(), alpha.float().cpu()
+    raise RuntimeError(f"unsupported quant bits: {quant_bit}")
+"""
+)
+
 provider = r'''
 class SafeTensorConvRotWeights:
     """Lazy reader for ComfyUI int8_tensorwise + ConvRot safetensors.
