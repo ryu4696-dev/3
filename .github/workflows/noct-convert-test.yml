@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/noct-convert-test.yml'
       - 'noct-tools/patch_export.py'
+      - 'noct-tools/validate_one_layer.py'
   workflow_dispatch:
 
 jobs:
@@ -69,6 +70,12 @@ jobs:
           rm -rf noct_mnn_test/onnx
           find noct_mnn_test -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
           du -sh noct_mnn_test
+
+      - name: Validate converted layer numerically
+        env:
+          PYTHONUNBUFFERED: '1'
+        run: |
+          python noct-tools/validate_one_layer.py upstream model/NoctQA_V1_int8_convrot.safetensors noct_mnn_test
 
       - name: Package test conversion
         run: |
