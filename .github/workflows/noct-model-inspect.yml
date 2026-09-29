@@ -1,0 +1,57 @@
+name: Inspect Noct-Q Safetensors
+
+on:
+  push:
+    branches: [ noct-q-android ]
+    paths: [ '.github/workflows/noct-model-inspect.yml' ]
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read safetensors header only
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://huggingface.co/Noctaluna/Noct-Q-Anime-Uncensored-Qwen-Image-2.1/resolve/main/NoctQA_V1_int8_convrot.safetensors"
+          curl -L --fail --retry 3 --range 0-7 "$URL" -o first8.bin
+          LEN=$(python3 - <<'PY'
+          import struct
+          b=open("first8.bin","rb").read(8)
+          if len(b)!=8: raise SystemExit(f"expected 8 bytes, got {len(b)}")
+          print(struct.unpack("<Q",b)[0])
+          PY
+          )
+          echo "Header length: $LEN"
+          END=$((7 + LEN))
+          curl -L --fail --retry 3 --range "0-$END" "$URL" -o header.bin
+          python3 - <<'PY'
+          import json, struct, collections
+          b=open("header.bin","rb").read()
+          n=struct.unpack("<Q",b[:8])[0]
+          h=json.loads(b[8:8+n])
+          open("header.json","w").write(json.dumps(h,indent=2))
+          keys=[k for k in h if k!="__metadata__"]
+          cfg=[k for k in keys if k.endswith(".comfy_quant")]
+          scales=[k for k in keys if k.endswith(".weight_scale")]
+          weights=[k for k in keys if k.endswith(".weight")]
+          with open("noct-header-report.txt","w") as f:
+              f.write(f"header_bytes={n}\n")
+              f.write(f"tensor_keys={len(keys)}\nweights={len(weights)}\nweight_scales={len(scales)}\ncomfy_quant={len(cfg)}\n")
+              f.write("\nmetadata:\n"+json.dumps(h.get("__metadata__",{}),indent=2)+"\n")
+              f.write("\nfirst 120 keys:\n"+"\n".join(keys[:120])+"\n")
+              f.write("\nweight prefixes sample:\n"+"\n".join(weights[:80])+"\n")
+          print(open("noct-header-report.txt").read())
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Noct-Q-Safetensors-Header
+          path: |
+            noct-header-report.txt
+            header.json
+          retention-days: 30
