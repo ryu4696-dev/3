@@ -1,0 +1,57 @@
+name: Build Noct-Q Android Probe
+
+on:
+  push:
+    branches: [ noct-q-android ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android NDK
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" --install "ndk;28.2.13676358"
+
+      - name: Checkout libQwenImage21
+        run: |
+          git clone https://github.com/scsonic/libQwenImage21.git upstream
+          cd upstream
+          git checkout f28617b6933593dfabdb8e273014f88d9108c0c2
+
+      - name: Patch probe branding
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("upstream/demo/src/main/AndroidManifest.xml")
+          s=p.read_text()
+          s=s.replace('android:label="Qwen-Image 2.1"', 'android:label="Noct-Q Probe"')
+          p.write_text(s)
+          PY
+
+      - name: Build probe APK
+        working-directory: upstream
+        run: ./gradlew :demo:assembleDebug --no-daemon --stacktrace
+
+      - name: Package
+        run: |
+          cp upstream/demo/build/outputs/apk/debug/demo-debug.apk Noct-Q-Probe-debug.apk
+          sha256sum Noct-Q-Probe-debug.apk > Noct-Q-Probe-debug.apk.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Noct-Q-Probe
+          path: |
+            Noct-Q-Probe-debug.apk
+            Noct-Q-Probe-debug.apk.sha256
+          retention-days: 30
