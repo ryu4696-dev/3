@@ -1,0 +1,129 @@
+name: Build Noct-Q Full MNN Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android || true
+          df -h /
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install conversion dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "numpy<2" safetensors huggingface_hub hf_xet
+          pip install --index-url https://download.pytorch.org/whl/cpu torch==2.6.0
+          pip install MNN
+          pip install "onnx==1.17.0" "protobuf<6,>=3.20.3"
+          mnnconvert -v || true
+
+      - name: Checkout and patch exporter
+        run: |
+          git clone https://github.com/scsonic/libQwenImage21.git upstream
+          cd upstream
+          git checkout f28617b6933593dfabdb8e273014f88d9108c0c2
+          cd ..
+          python noct-tools/patch_export.py upstream/export/export_mnn.py
+
+      - name: Download Noct-Q V1
+        run: |
+          mkdir -p model
+          hf download Noctaluna/Noct-Q-Anime-Uncensored-Qwen-Image-2.1 NoctQA_V1_int8_convrot.safetensors --local-dir model
+          echo "817cabab9bc08551bdb6398181ce713d0bd416820174022c1a9e25d42524e2e7  model/NoctQA_V1_int8_convrot.safetensors" | sha256sum -c -
+
+      - name: Convert all 32 transformer blocks
+        env:
+          MNNCONVERT: mnnconvert
+          PYTHONUNBUFFERED: '1'
+        run: |
+          mkdir -p noct_mnn
+          python upstream/export/export_mnn.py \
+            --safetensors model/NoctQA_V1_int8_convrot.safetensors \
+            --out noct_mnn \
+            --layers 32 \
+            --only txt_in,img_in,dit \
+            --bits 4 \
+            --aux_bits 8 \
+            --block 32 \
+            --fuse 0
+          rm -rf noct_mnn/onnx
+          find noct_mnn -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
+          du -sh noct_mnn
+
+      - name: Prepare split release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp noct_mnn/dit.mnn noct_mnn/img_in.mnn noct_mnn/img_in.mnn.weight \
+             noct_mnn/txt_in.mnn noct_mnn/txt_in.mnn.weight release/
+          split -b 1800000000 -d -a 2 noct_mnn/dit.mnn.weight release/dit.mnn.weight.part
+          python3 - <<'PY'
+          import hashlib, json, pathlib
+          src=pathlib.Path("noct_mnn")
+          rel=pathlib.Path("release")
+          def sha(p):
+              h=hashlib.sha256()
+              with open(p,"rb") as f:
+                  while True:
+                      b=f.read(8*1024*1024)
+                      if not b: break
+                      h.update(b)
+              return h.hexdigest()
+          files={}
+          for name in ["dit.mnn","img_in.mnn","img_in.mnn.weight","txt_in.mnn","txt_in.mnn.weight"]:
+              p=rel/name
+              files[name]={"size":p.stat().st_size,"sha256":sha(p)}
+          whole=src/"dit.mnn.weight"
+          parts=[]
+          for p in sorted(rel.glob("dit.mnn.weight.part*")):
+              parts.append({"name":p.name,"size":p.stat().st_size,"sha256":sha(p)})
+          files["dit.mnn.weight"]={"size":whole.stat().st_size,"sha256":sha(whole),"parts":parts}
+          manifest={
+              "version":"noct-q-mnn-v1",
+              "source_repo":"Noctaluna/Noct-Q-Anime-Uncensored-Qwen-Image-2.1",
+              "source_file":"NoctQA_V1_int8_convrot.safetensors",
+              "source_sha256":"817cabab9bc08551bdb6398181ce713d0bd416820174022c1a9e25d42524e2e7",
+              "base_runtime":"scsonic/libQwenImage21@f28617b6933593dfabdb8e273014f88d9108c0c2",
+              "quantization":"MNN asymmetric INT4 block32; auxiliary linears INT8; img_in FP16",
+              "files":files
+          }
+          (rel/"manifest.json").write_text(json.dumps(manifest,indent=2)+"\n")
+          print(json.dumps(manifest,indent=2))
+          PY
+          ls -lh release
+          sha256sum release/* > release/SHA256SUMS.txt
+
+      - name: Publish model release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="noct-q-mnn-v1"
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 && \
+            gh release delete "$TAG" -R "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Noct-Q Anime MNN v1" \
+            --notes "Android MNN conversion of Noct-Q Anime V1 for the Noct-Q Android app. Non-commercial upstream model license applies."
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" release/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Noct-Q-MNN-manifest
+          path: |
+            release/manifest.json
+            release/SHA256SUMS.txt
+          retention-days: 30
