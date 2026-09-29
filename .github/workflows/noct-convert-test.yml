@@ -1,0 +1,83 @@
+name: Convert Noct-Q Test Layer
+
+on:
+  push:
+    branches: [ noct-q-android ]
+    paths:
+      - '.github/workflows/noct-convert-test.yml'
+      - 'noct-tools/patch_export.py'
+  workflow_dispatch:
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android || true
+          df -h /
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install conversion dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "numpy<2" safetensors onnx huggingface_hub hf_xet
+          pip install --index-url https://download.pytorch.org/whl/cpu torch==2.6.0
+          pip install MNN
+          which mnnconvert
+          mnnconvert -v || true
+
+      - name: Checkout Android exporter
+        run: |
+          git clone https://github.com/scsonic/libQwenImage21.git upstream
+          cd upstream
+          git checkout f28617b6933593dfabdb8e273014f88d9108c0c2
+          cd ..
+          python noct-tools/patch_export.py upstream/export/export_mnn.py
+
+      - name: Download Noct-Q V1
+        env:
+          HF_HUB_ENABLE_HF_TRANSFER: '0'
+        run: |
+          mkdir -p model
+          hf download Noctaluna/Noct-Q-Anime-Uncensored-Qwen-Image-2.1 NoctQA_V1_int8_convrot.safetensors --local-dir model
+          ls -lh model/NoctQA_V1_int8_convrot.safetensors
+          df -h /
+
+      - name: Export one transformer block
+        env:
+          MNNCONVERT: mnnconvert
+          PYTHONUNBUFFERED: '1'
+        run: |
+          mkdir -p noct_mnn_test
+          python upstream/export/export_mnn.py \
+            --safetensors model/NoctQA_V1_int8_convrot.safetensors \
+            --out noct_mnn_test \
+            --layers 1 \
+            --only txt_in,img_in,dit \
+            --bits 4 \
+            --aux_bits 8 \
+            --block 32 \
+            --fuse 0
+          rm -rf noct_mnn_test/onnx
+          find noct_mnn_test -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
+          du -sh noct_mnn_test
+
+      - name: Package test conversion
+        run: |
+          tar -czf Noct-Q-MNN-one-layer.tar.gz -C noct_mnn_test .
+          sha256sum Noct-Q-MNN-one-layer.tar.gz > Noct-Q-MNN-one-layer.tar.gz.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Noct-Q-MNN-one-layer
+          path: |
+            Noct-Q-MNN-one-layer.tar.gz
+            Noct-Q-MNN-one-layer.tar.gz.sha256
+          retention-days: 7
