@@ -1,6 +1,9 @@
 name: Build Noct-Q Full MNN Release
 
 on:
+  push:
+    branches: [ noct-q-android ]
+    paths: [ '.github/workflows/noct-full-release.yml' ]
   workflow_dispatch:
 
 permissions:
