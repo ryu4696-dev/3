@@ -115,36 +115,38 @@ jobs:
           gs = gs.replace("versionName '0.3.0'", "versionName '0.4.0'")
           g.write_text(gs)
 
-          manifest = Path("ledgerapp/app/src/main/AndroidManifest.xml")
-          manifest.write_text("""<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application
-        android:allowBackup="true"
-        android:icon="@drawable/app_icon"
-        android:roundIcon="@drawable/app_icon"
-        android:label="MiniCoPaTis"
-        android:supportsRtl="true"
-        android:theme="@style/AppTheme">
-        <activity
-            android:name="jp.co.kobayashi.cardboardquote.QuoteActivity"
-            android:screenOrientation="unspecified"
-            android:exported="false" />
-        <activity
-            android:name="jp.co.kobayashi.cardboardquote.MainActivity"
-            android:screenOrientation="unspecified"
-            android:exported="false" />
-        <activity
-            android:name=".MainActivity"
-            android:screenOrientation="unspecified"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-    </application>
-</manifest>
-""")
+          manifest_lines = [
+              '<?xml version="1.0" encoding="utf-8"?>',
+              '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+              '    <application',
+              '        android:allowBackup="true"',
+              '        android:icon="@drawable/app_icon"',
+              '        android:roundIcon="@drawable/app_icon"',
+              '        android:label="MiniCoPaTis"',
+              '        android:supportsRtl="true"',
+              '        android:theme="@style/AppTheme">',
+              '        <activity',
+              '            android:name="jp.co.kobayashi.cardboardquote.QuoteActivity"',
+              '            android:screenOrientation="unspecified"',
+              '            android:exported="false" />',
+              '        <activity',
+              '            android:name="jp.co.kobayashi.cardboardquote.MainActivity"',
+              '            android:screenOrientation="unspecified"',
+              '            android:exported="false" />',
+              '        <activity',
+              '            android:name=".MainActivity"',
+              '            android:screenOrientation="unspecified"',
+              '            android:exported="true">',
+              '            <intent-filter>',
+              '                <action android:name="android.intent.action.MAIN" />',
+              '                <category android:name="android.intent.category.LAUNCHER" />',
+              '            </intent-filter>',
+              '        </activity>',
+              '    </application>',
+              '</manifest>',
+              ''
+          ]
+          Path("ledgerapp/app/src/main/AndroidManifest.xml").write_text('\n'.join(manifest_lines))
           PY
 
       - name: Restore quote code and icon
