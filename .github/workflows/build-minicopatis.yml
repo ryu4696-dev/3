@@ -1,0 +1,191 @@
+name: Build MiniCoPaTis APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-minicopatis.yml'
+      - '.github/minicopatis/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-minicopatis-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android 35
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Restore SalesLedger v0.3.0 source
+        run: |
+          GOOD=7b554590b919359d104d3ab34b067fd52474a37c
+          git show "$GOOD:.github/ledger-build-0930/part1.b64" > /tmp/p1
+          git show "$GOOD:.github/ledger-build-0930/part4.b64" > /tmp/p4
+          git show "$GOOD:.github/ledger-build-0930/part5.b64" > /tmp/p5
+          git show "$GOOD:.github/ledger-build-0930/part2.b64" > /tmp/p2
+          git show "$GOOD:.github/ledger-build-0930/part3.b64" > /tmp/p3
+          cat /tmp/p1 /tmp/p4 /tmp/p5 /tmp/p2 /tmp/p3 > /tmp/ledgerapp.tar.bz2.b64
+          base64 -d /tmp/ledgerapp.tar.bz2.b64 > /tmp/ledgerapp.tar.bz2
+          tar -xjf /tmp/ledgerapp.tar.bz2
+
+      - name: Integrate MiniCoPaTis home and quote launcher
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("ledgerapp/app/src/main/java/jp/co/ichika/salesledger/MainActivity.kt")
+          s = p.read_text()
+
+          old_title = '''        root.addView(text("営業データ", 28f, Color.rgb(15, 23, 42), Typeface.BOLD).apply {
+              setPadding(0, 0, 0, dp(22))
+          })
+
+          '''
+          if old_title not in s:
+              raise SystemExit("home title block not found")
+          s = s.replace(old_title, "", 1)
+
+          old_sales_end = '''        root.addView(salesCard, fullWidthWrap())
+
+          setRootContent(root)
+          '''
+          new_sales_end = '''        root.addView(salesCard, fullWidthWrap().apply { bottomMargin = dp(16) })
+
+          val quoteCard = card()
+          quoteCard.addView(text("簡易見積", 19f, Color.rgb(15, 23, 42), Typeface.BOLD).apply {
+              setPadding(0, 0, 0, dp(16))
+          })
+          quoteCard.addView(actionButton("簡易見積を開く", true).apply {
+              setOnClickListener { openQuickQuote() }
+          }, fullWidth(dp(48)))
+          root.addView(quoteCard, fullWidthWrap())
+
+          setRootContent(root)
+          '''
+          if old_sales_end not in s:
+              raise SystemExit("sales card end block not found")
+          s = s.replace(old_sales_end, new_sales_end, 1)
+
+          marker = '''    private fun showLedger() {
+          '''
+          quote_method = '''    private fun openQuickQuote() {
+              try {
+                  startActivity(Intent().setClassName(packageName, "jp.co.kobayashi.cardboardquote.MainActivity"))
+              } catch (e: Exception) {
+                  Toast.makeText(this, "簡易見積を開けませんでした", Toast.LENGTH_LONG).show()
+              }
+          }
+
+          '''
+          if marker not in s:
+              raise SystemExit("showLedger marker not found")
+          s = s.replace(marker, quote_method + marker, 1)
+          p.write_text(s)
+
+          g = Path("ledgerapp/app/build.gradle")
+          gs = g.read_text()
+          gs = gs.replace("versionCode 3", "versionCode 4")
+          gs = gs.replace("versionName '0.3.0'", "versionName '0.4.0'")
+          g.write_text(gs)
+
+          manifest = Path("ledgerapp/app/src/main/AndroidManifest.xml")
+          manifest.write_text('''<?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:allowBackup="true"
+                  android:icon="@drawable/app_icon"
+                  android:roundIcon="@drawable/app_icon"
+                  android:label="MiniCoPaTis"
+                  android:supportsRtl="true"
+                  android:theme="@style/AppTheme">
+                  <activity
+                      android:name="jp.co.kobayashi.cardboardquote.QuoteActivity"
+                      android:screenOrientation="unspecified"
+                      android:exported="false" />
+                  <activity
+                      android:name="jp.co.kobayashi.cardboardquote.MainActivity"
+                      android:screenOrientation="unspecified"
+                      android:exported="false" />
+                  <activity
+                      android:name=".MainActivity"
+                      android:screenOrientation="unspecified"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          ''')
+          PY
+
+      - name: Restore quote code and icon
+        run: |
+          cat .github/minicopatis/quote-dex-00.b64               .github/minicopatis/quote-dex-01.b64               .github/minicopatis/quote-dex-02.b64               .github/minicopatis/quote-dex-03.b64               .github/minicopatis/quote-dex-04.b64               .github/minicopatis/quote-dex-05.b64 > /tmp/quote-dex.b64
+          base64 -d /tmp/quote-dex.b64 > /tmp/quote-classes.dex.bz2
+          bzip2 -dc /tmp/quote-classes.dex.bz2 > /tmp/quote-classes.dex
+          test "$(stat -c%s /tmp/quote-classes.dex)" -eq 81768
+          echo "4906e2fedb82ce9d3a43123cd4b458cb1046aecf2cc3e5a29bf28aadda0329d5  /tmp/quote-classes.dex" | sha256sum -c -
+
+          mkdir -p ledgerapp/app/src/main/res/drawable
+          cat .github/minicopatis/icon-00.b64               .github/minicopatis/icon-01.b64               .github/minicopatis/icon-02.b64 | base64 -d > ledgerapp/app/src/main/res/drawable/app_icon.png
+          test "$(stat -c%s ledgerapp/app/src/main/res/drawable/app_icon.png)" -eq 14516
+          echo "8aac6bac0e6f18a6197d051de0b737475bc4f8232d34299717ef66984e07f6e5  ledgerapp/app/src/main/res/drawable/app_icon.png" | sha256sum -c -
+
+      - name: Build base APK
+        run: gradle -p ledgerapp :app:assembleDebug --stacktrace
+
+      - name: Inject quote dex and sign
+        run: |
+          cp ledgerapp/app/build/outputs/apk/debug/app-debug.apk /tmp/minicopatis-unsigned.apk
+          cp /tmp/quote-classes.dex /tmp/classes4.dex
+          cd /tmp
+          zip -q minicopatis-unsigned.apk classes4.dex
+
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -f -p 4             /tmp/minicopatis-unsigned.apk /tmp/minicopatis-aligned.apk
+
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            mkdir -p "$HOME/.android"
+            keytool -genkeypair -v               -keystore "$HOME/.android/debug.keystore"               -storepass android               -alias androiddebugkey               -keypass android               -keyalg RSA               -keysize 2048               -validity 10000               -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-key-alias androiddebugkey             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.0.apk"             /tmp/minicopatis-aligned.apk
+
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose             "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.0.apk"
+
+          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.0.apk" | grep -E 'classes4.dex|app_icon'
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiniCoPaTis-v0.4.0
+          path: MiniCoPaTis-v0.4.0.apk
+          retention-days: 30
