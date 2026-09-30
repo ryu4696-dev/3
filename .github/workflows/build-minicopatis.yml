@@ -111,8 +111,8 @@ jobs:
 
           g = Path("ledgerapp/app/build.gradle")
           gs = g.read_text()
-          gs = gs.replace("versionCode 3", "versionCode 5")
-          gs = gs.replace("versionName '0.3.0'", "versionName '0.4.1'")
+          gs = gs.replace("versionCode 3", "versionCode 6")
+          gs = gs.replace("versionName '0.3.0'", "versionName '0.4.2'")
           g.write_text(gs)
 
           manifest_lines = [
@@ -120,8 +120,8 @@ jobs:
               '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
               '    <application',
               '        android:allowBackup="true"',
-              '        android:icon="@drawable/app_icon"',
-              '        android:roundIcon="@drawable/app_icon"',
+              '        android:icon="@mipmap/ic_launcher"',
+              '        android:roundIcon="@mipmap/ic_launcher"',
               '        android:label="MiniCoPaTis"',
               '        android:supportsRtl="true"',
               '        android:theme="@style/AppTheme">',
@@ -202,13 +202,46 @@ jobs:
           test "$(stat -c%s ledgerapp/app/src/main/res/drawable/app_icon.png)" -eq 14516
           echo "8aac6bac0e6f18a6197d051de0b737475bc4f8232d34299717ef66984e07f6e5  ledgerapp/app/src/main/res/drawable/app_icon.png" | sha256sum -c -
 
-          # The launcher adds its own legacy-icon safe margin. Compensate by enlarging
-          # the artwork about 20% and center-cropping back to 192x192.
+          # Android was treating the imported image as a legacy icon and putting it
+          # inside an extra white launcher circle. Build a real adaptive icon instead.
+          mkdir -p ledgerapp/app/src/main/res/mipmap
+          mkdir -p ledgerapp/app/src/main/res/mipmap-anydpi-v26
+          mkdir -p ledgerapp/app/src/main/res/drawable-nodpi
+          mkdir -p ledgerapp/app/src/main/res/drawable
+
+          # Pre-Android 8 fallback.
+          cp ledgerapp/app/src/main/res/drawable/app_icon.png \
+            ledgerapp/app/src/main/res/mipmap/ic_launcher.png
+
           if command -v convert >/dev/null 2>&1; then
+            # Remove only the white corner canvas, enlarge the reused quote artwork,
+            # and let the adaptive background fill the launcher mask.
             convert ledgerapp/app/src/main/res/drawable/app_icon.png \
-              -resize 120% -gravity center -crop 192x192+0+0 +repage \
-              ledgerapp/app/src/main/res/drawable/app_icon.png
+              -alpha on -fuzz 8% -transparent white \
+              -resize 138% -gravity center -crop 192x192+0+0 +repage \
+              ledgerapp/app/src/main/res/drawable-nodpi/icon_foreground.png
+          else
+            cp ledgerapp/app/src/main/res/drawable/app_icon.png \
+              ledgerapp/app/src/main/res/drawable-nodpi/icon_foreground.png
           fi
+
+          cat > ledgerapp/app/src/main/res/drawable/icon_background.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+              <solid android:color="#0D6548" />
+          </shape>
+          EOF
+
+          cat > ledgerapp/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@drawable/icon_background" />
+              <foreground android:drawable="@drawable/icon_foreground" />
+          </adaptive-icon>
+          EOF
+
+          cp ledgerapp/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml \
+            ledgerapp/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
 
       - name: Build base APK
         run: gradle -p ledgerapp :app:assembleDebug --stacktrace
@@ -227,15 +260,15 @@ jobs:
             keytool -genkeypair -v               -keystore "$HOME/.android/debug.keystore"               -storepass android               -alias androiddebugkey               -keypass android               -keyalg RSA               -keysize 2048               -validity 10000               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-key-alias androiddebugkey             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.1.apk"             /tmp/minicopatis-aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-key-alias androiddebugkey             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.2.apk"             /tmp/minicopatis-aligned.apk
 
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose             "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.1.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose             "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.2.apk"
 
-          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.1.apk" | grep -E 'classes4.dex|app_icon'
+          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.2.apk" | grep -E 'classes4.dex|app_icon'
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MiniCoPaTis-v0.4.1
-          path: MiniCoPaTis-v0.4.1.apk
+          name: MiniCoPaTis-v0.4.2
+          path: MiniCoPaTis-v0.4.2.apk
           retention-days: 30
