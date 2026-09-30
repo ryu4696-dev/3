@@ -59,53 +59,53 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           p = Path("ledgerapp/app/src/main/java/jp/co/ichika/salesledger/MainActivity.kt")
           s = p.read_text()
 
-          old_title = '''        root.addView(text("営業データ", 28f, Color.rgb(15, 23, 42), Typeface.BOLD).apply {
-              setPadding(0, 0, 0, dp(22))
-          })
-
-          '''
-          if old_title not in s:
+          s2, n = re.subn(
+              r'\n\s*root\.addView\(text\("営業データ",\s*28f,\s*Color\.rgb\(15,\s*23,\s*42\),\s*Typeface\.BOLD\)\.apply\s*\{\s*setPadding\(0,\s*0,\s*0,\s*dp\(22\)\)\s*\}\)\s*\n',
+              '\n',
+              s,
+              count=1,
+              flags=re.S
+          )
+          if n != 1:
               raise SystemExit("home title block not found")
-          s = s.replace(old_title, "", 1)
+          s = s2
 
-          old_sales_end = '''        root.addView(salesCard, fullWidthWrap())
+          sales_line = '        root.addView(salesCard, fullWidthWrap())'
+          if sales_line not in s:
+              raise SystemExit("sales card line not found")
+          quote_lines = [
+              '        root.addView(salesCard, fullWidthWrap().apply { bottomMargin = dp(16) })',
+              '',
+              '        val quoteCard = card()',
+              '        quoteCard.addView(text("簡易見積", 19f, Color.rgb(15, 23, 42), Typeface.BOLD).apply {',
+              '            setPadding(0, 0, 0, dp(16))',
+              '        })',
+              '        quoteCard.addView(actionButton("簡易見積を開く", true).apply {',
+              '            setOnClickListener { openQuickQuote() }',
+              '        }, fullWidth(dp(48)))',
+              '        root.addView(quoteCard, fullWidthWrap())'
+          ]
+          s = s.replace(sales_line, '\n'.join(quote_lines), 1)
 
-          setRootContent(root)
-          '''
-          new_sales_end = '''        root.addView(salesCard, fullWidthWrap().apply { bottomMargin = dp(16) })
-
-          val quoteCard = card()
-          quoteCard.addView(text("簡易見積", 19f, Color.rgb(15, 23, 42), Typeface.BOLD).apply {
-              setPadding(0, 0, 0, dp(16))
-          })
-          quoteCard.addView(actionButton("簡易見積を開く", true).apply {
-              setOnClickListener { openQuickQuote() }
-          }, fullWidth(dp(48)))
-          root.addView(quoteCard, fullWidthWrap())
-
-          setRootContent(root)
-          '''
-          if old_sales_end not in s:
-              raise SystemExit("sales card end block not found")
-          s = s.replace(old_sales_end, new_sales_end, 1)
-
-          marker = '''    private fun showLedger() {
-          '''
-          quote_method = '''    private fun openQuickQuote() {
-              try {
-                  startActivity(Intent().setClassName(packageName, "jp.co.kobayashi.cardboardquote.MainActivity"))
-              } catch (e: Exception) {
-                  Toast.makeText(this, "簡易見積を開けませんでした", Toast.LENGTH_LONG).show()
-              }
-          }
-
-          '''
+          marker = '    private fun showLedger() {'
           if marker not in s:
               raise SystemExit("showLedger marker not found")
+          quote_method = '\n'.join([
+              '    private fun openQuickQuote() {',
+              '        try {',
+              '            startActivity(Intent().setClassName(packageName, "jp.co.kobayashi.cardboardquote.MainActivity"))',
+              '        } catch (e: Exception) {',
+              '            Toast.makeText(this, "簡易見積を開けませんでした", Toast.LENGTH_LONG).show()',
+              '        }',
+              '    }',
+              '',
+              ''
+          ])
           s = s.replace(marker, quote_method + marker, 1)
           p.write_text(s)
 
@@ -116,35 +116,35 @@ jobs:
           g.write_text(gs)
 
           manifest = Path("ledgerapp/app/src/main/AndroidManifest.xml")
-          manifest.write_text('''<?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <application
-                  android:allowBackup="true"
-                  android:icon="@drawable/app_icon"
-                  android:roundIcon="@drawable/app_icon"
-                  android:label="MiniCoPaTis"
-                  android:supportsRtl="true"
-                  android:theme="@style/AppTheme">
-                  <activity
-                      android:name="jp.co.kobayashi.cardboardquote.QuoteActivity"
-                      android:screenOrientation="unspecified"
-                      android:exported="false" />
-                  <activity
-                      android:name="jp.co.kobayashi.cardboardquote.MainActivity"
-                      android:screenOrientation="unspecified"
-                      android:exported="false" />
-                  <activity
-                      android:name=".MainActivity"
-                      android:screenOrientation="unspecified"
-                      android:exported="true">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>
-          ''')
+          manifest.write_text("""<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:allowBackup="true"
+        android:icon="@drawable/app_icon"
+        android:roundIcon="@drawable/app_icon"
+        android:label="MiniCoPaTis"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+        <activity
+            android:name="jp.co.kobayashi.cardboardquote.QuoteActivity"
+            android:screenOrientation="unspecified"
+            android:exported="false" />
+        <activity
+            android:name="jp.co.kobayashi.cardboardquote.MainActivity"
+            android:screenOrientation="unspecified"
+            android:exported="false" />
+        <activity
+            android:name=".MainActivity"
+            android:screenOrientation="unspecified"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+""")
           PY
 
       - name: Restore quote code and icon
