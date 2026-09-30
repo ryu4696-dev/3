@@ -111,8 +111,8 @@ jobs:
 
           g = Path("ledgerapp/app/build.gradle")
           gs = g.read_text()
-          gs = gs.replace("versionCode 3", "versionCode 4")
-          gs = gs.replace("versionName '0.3.0'", "versionName '0.4.0'")
+          gs = gs.replace("versionCode 3", "versionCode 5")
+          gs = gs.replace("versionName '0.3.0'", "versionName '0.4.1'")
           g.write_text(gs)
 
           manifest_lines = [
@@ -146,7 +146,43 @@ jobs:
               '</manifest>',
               ''
           ]
-          Path("ledgerapp/app/src/main/AndroidManifest.xml").write_text('\n'.join(manifest_lines))
+          # Android 15/16 forces edge-to-edge for newer targets. The imported quote UI
+          # was authored as a normal fitted-window screen, so opt it out explicitly.
+          values35 = Path("ledgerapp/app/src/main/res/values-v35")
+          values35.mkdir(parents=True, exist_ok=True)
+          (values35 / "quote_compat.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="QuoteCompatTheme" parent="@style/AppTheme">
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="android:statusBarColor">#F7F3EA</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>
+""")
+          values = Path("ledgerapp/app/src/main/res/values")
+          values.mkdir(parents=True, exist_ok=True)
+          (values / "quote_compat.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="QuoteCompatTheme" parent="@style/AppTheme">
+        <item name="android:statusBarColor">#F7F3EA</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>
+""")
+
+          # Attach the compatibility theme only to the quote screens.
+          manifest_text = '\n'.join(manifest_lines)
+          manifest_text = manifest_text.replace(
+              'android:name="jp.co.kobayashi.cardboardquote.QuoteActivity"\n            android:screenOrientation="unspecified"',
+              'android:name="jp.co.kobayashi.cardboardquote.QuoteActivity"\n            android:theme="@style/QuoteCompatTheme"\n            android:screenOrientation="unspecified"'
+          )
+          manifest_text = manifest_text.replace(
+              'android:name="jp.co.kobayashi.cardboardquote.MainActivity"\n            android:screenOrientation="unspecified"',
+              'android:name="jp.co.kobayashi.cardboardquote.MainActivity"\n            android:theme="@style/QuoteCompatTheme"\n            android:screenOrientation="unspecified"'
+          )
+          Path("ledgerapp/app/src/main/AndroidManifest.xml").write_text(manifest_text)
           PY
 
       - name: Restore quote code and icon
@@ -161,6 +197,14 @@ jobs:
           cat .github/minicopatis/icon-00.b64               .github/minicopatis/icon-01.b64               .github/minicopatis/icon-02.b64 | base64 -d > ledgerapp/app/src/main/res/drawable/app_icon.png
           test "$(stat -c%s ledgerapp/app/src/main/res/drawable/app_icon.png)" -eq 14516
           echo "8aac6bac0e6f18a6197d051de0b737475bc4f8232d34299717ef66984e07f6e5  ledgerapp/app/src/main/res/drawable/app_icon.png" | sha256sum -c -
+
+          # The launcher adds its own legacy-icon safe margin. Compensate by enlarging
+          # the artwork about 20% and center-cropping back to 192x192.
+          if command -v convert >/dev/null 2>&1; then
+            convert ledgerapp/app/src/main/res/drawable/app_icon.png \
+              -resize 120% -gravity center -crop 192x192+0+0 +repage \
+              ledgerapp/app/src/main/res/drawable/app_icon.png
+          fi
 
       - name: Build base APK
         run: gradle -p ledgerapp :app:assembleDebug --stacktrace
@@ -179,15 +223,15 @@ jobs:
             keytool -genkeypair -v               -keystore "$HOME/.android/debug.keystore"               -storepass android               -alias androiddebugkey               -keypass android               -keyalg RSA               -keysize 2048               -validity 10000               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-key-alias androiddebugkey             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.0.apk"             /tmp/minicopatis-aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-key-alias androiddebugkey             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.1.apk"             /tmp/minicopatis-aligned.apk
 
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose             "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.0.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose             "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.1.apk"
 
-          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.0.apk" | grep -E 'classes4.dex|app_icon'
+          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.1.apk" | grep -E 'classes4.dex|app_icon'
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MiniCoPaTis-v0.4.0
-          path: MiniCoPaTis-v0.4.0.apk
+          name: MiniCoPaTis-v0.4.1
+          path: MiniCoPaTis-v0.4.1.apk
           retention-days: 30
