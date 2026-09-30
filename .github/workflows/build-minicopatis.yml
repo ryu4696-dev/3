@@ -111,8 +111,8 @@ jobs:
 
           g = Path("ledgerapp/app/build.gradle")
           gs = g.read_text()
-          gs = gs.replace("versionCode 3", "versionCode 8")
-          gs = gs.replace("versionName '0.3.0'", "versionName '0.4.4'")
+          gs = gs.replace("versionCode 3", "versionCode 9")
+          gs = gs.replace("versionName '0.3.0'", "versionName '0.4.5'")
           g.write_text(gs)
 
           manifest_lines = [
@@ -218,7 +218,7 @@ jobs:
             # and let the adaptive background fill the launcher mask.
             convert ledgerapp/app/src/main/res/drawable/app_icon.png \
               -alpha on -fuzz 8% -transparent white \
-              -resize 68% -gravity center -background none -extent 192x192 \
+              -resize 100% -gravity center -background none -extent 192x192 \
               ledgerapp/app/src/main/res/drawable-nodpi/icon_foreground.png
           else
             cp ledgerapp/app/src/main/res/drawable/app_icon.png \
@@ -232,11 +232,21 @@ jobs:
           </shape>
           EOF
 
+          cat > ledgerapp/app/src/main/res/drawable/icon_foreground_inset.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <inset xmlns:android="http://schemas.android.com/apk/res/android"
+              android:drawable="@drawable/icon_foreground"
+              android:insetLeft="18%"
+              android:insetTop="18%"
+              android:insetRight="18%"
+              android:insetBottom="18%" />
+          EOF
+
           cat > ledgerapp/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
               <background android:drawable="@drawable/icon_background" />
-              <foreground android:drawable="@drawable/icon_foreground" />
+              <foreground android:drawable="@drawable/icon_foreground_inset" />
           </adaptive-icon>
           EOF
 
@@ -260,15 +270,15 @@ jobs:
             keytool -genkeypair -v               -keystore "$HOME/.android/debug.keystore"               -storepass android               -alias androiddebugkey               -keypass android               -keyalg RSA               -keysize 2048               -validity 10000               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-key-alias androiddebugkey             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.4.apk"             /tmp/minicopatis-aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-key-alias androiddebugkey             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.5.apk"             /tmp/minicopatis-aligned.apk
 
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose             "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.4.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose             "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.5.apk"
 
-          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.4.apk" | grep -E 'classes4.dex|app_icon'
+          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v0.4.5.apk" | grep -E 'classes4.dex|app_icon'
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MiniCoPaTis-v0.4.4
-          path: MiniCoPaTis-v0.4.4.apk
+          name: MiniCoPaTis-v0.4.5
+          path: MiniCoPaTis-v0.4.5.apk
           retention-days: 30
