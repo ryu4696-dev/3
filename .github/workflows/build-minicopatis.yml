@@ -150,27 +150,31 @@ jobs:
           # was authored as a normal fitted-window screen, so opt it out explicitly.
           values35 = Path("ledgerapp/app/src/main/res/values-v35")
           values35.mkdir(parents=True, exist_ok=True)
-          (values35 / "quote_compat.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style name="QuoteCompatTheme" parent="@style/AppTheme">
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
-        <item name="android:statusBarColor">#F7F3EA</item>
-        <item name="android:navigationBarColor">#FFFFFF</item>
-        <item name="android:windowLightStatusBar">true</item>
-    </style>
-</resources>
-""")
+          (values35 / "quote_compat.xml").write_text('\n'.join([
+              '<?xml version="1.0" encoding="utf-8"?>',
+              '<resources>',
+              '    <style name="QuoteCompatTheme" parent="@style/AppTheme">',
+              '        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>',
+              '        <item name="android:statusBarColor">#F7F3EA</item>',
+              '        <item name="android:navigationBarColor">#FFFFFF</item>',
+              '        <item name="android:windowLightStatusBar">true</item>',
+              '    </style>',
+              '</resources>',
+              ''
+          ]))
           values = Path("ledgerapp/app/src/main/res/values")
           values.mkdir(parents=True, exist_ok=True)
-          (values / "quote_compat.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style name="QuoteCompatTheme" parent="@style/AppTheme">
-        <item name="android:statusBarColor">#F7F3EA</item>
-        <item name="android:navigationBarColor">#FFFFFF</item>
-        <item name="android:windowLightStatusBar">true</item>
-    </style>
-</resources>
-""")
+          (values / "quote_compat.xml").write_text('\n'.join([
+              '<?xml version="1.0" encoding="utf-8"?>',
+              '<resources>',
+              '    <style name="QuoteCompatTheme" parent="@style/AppTheme">',
+              '        <item name="android:statusBarColor">#F7F3EA</item>',
+              '        <item name="android:navigationBarColor">#FFFFFF</item>',
+              '        <item name="android:windowLightStatusBar">true</item>',
+              '    </style>',
+              '</resources>',
+              ''
+          ]))
 
           # Attach the compatibility theme only to the quote screens.
           manifest_text = '\n'.join(manifest_lines)
