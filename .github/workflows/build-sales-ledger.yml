@@ -1,0 +1,52 @@
+name: Build Sales Ledger APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-sales-ledger.yml'
+      - '.github/ledger-build-0930/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-sales-ledger-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Restore source
+        run: |
+          cat .github/ledger-build-0930/part1.b64 .github/ledger-build-0930/part2.b64 .github/ledger-build-0930/part3.b64 > /tmp/ledgerapp.tar.bz2.b64
+          base64 -d /tmp/ledgerapp.tar.bz2.b64 > /tmp/ledgerapp.tar.bz2
+          tar -xjf /tmp/ledgerapp.tar.bz2
+
+      - name: Build APK
+        run: gradle -p ledgerapp :app:assembleDebug --stacktrace
+
+      - name: Prepare artifact
+        run: cp ledgerapp/app/build/outputs/apk/debug/app-debug.apk SalesLedger-v0.1.0.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SalesLedger-v0.1.0
+          path: SalesLedger-v0.1.0.apk
+          retention-days: 30
