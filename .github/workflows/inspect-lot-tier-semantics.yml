@@ -1,0 +1,30 @@
+name: Inspect Lot Tier Semantics
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/inspect-lot-tier-semantics.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore and inspect
+        run: |
+          GOOD=7b554590b919359d104d3ab34b067fd52474a37c
+          git show "$GOOD:.github/ledger-build-0930/part1.b64" > /tmp/p1
+          git show "$GOOD:.github/ledger-build-0930/part4.b64" > /tmp/p4
+          git show "$GOOD:.github/ledger-build-0930/part5.b64" > /tmp/p5
+          git show "$GOOD:.github/ledger-build-0930/part2.b64" > /tmp/p2
+          git show "$GOOD:.github/ledger-build-0930/part3.b64" > /tmp/p3
+          cat /tmp/p1 /tmp/p4 /tmp/p5 /tmp/p2 /tmp/p3 | base64 -d > /tmp/src.tar.bz2
+          tar -xjf /tmp/src.tar.bz2
+          sed -n '165,260p' ledgerapp/app/src/main/java/jp/co/ichika/salesledger/CsvImporter.kt
