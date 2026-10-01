@@ -111,8 +111,8 @@ jobs:
 
           g = Path("ledgerapp/app/build.gradle")
           gs = g.read_text()
-          gs = gs.replace("versionCode 3", "versionCode 11")
-          gs = gs.replace("versionName '0.3.0'", "versionName '0.5.1'")
+          gs = gs.replace("versionCode 3", "versionCode 12")
+          gs = gs.replace("versionName '0.3.0'", "versionName '0.5.2'")
           g.write_text(gs)
 
           manifest_lines = [
@@ -192,6 +192,7 @@ jobs:
       - name: Apply ledger and all-company sales updates
         run: |
           python3 .github/minicopatis/apply-v050.py
+          python3 .github/minicopatis/apply-v052-dimensions.py
           cp .github/minicopatis/AllSalesTableView.kt \
             ledgerapp/app/src/main/java/jp/co/ichika/salesledger/AllSalesTableView.kt
 
@@ -276,15 +277,15 @@ jobs:
             keytool -genkeypair -v               -keystore "$HOME/.android/debug.keystore"               -storepass android               -alias androiddebugkey               -keypass android               -keyalg RSA               -keysize 2048               -validity 10000               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-key-alias androiddebugkey             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v0.5.1.apk"             /tmp/minicopatis-aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-key-alias androiddebugkey             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v0.5.2.apk"             /tmp/minicopatis-aligned.apk
 
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose             "$GITHUB_WORKSPACE/MiniCoPaTis-v0.5.1.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose             "$GITHUB_WORKSPACE/MiniCoPaTis-v0.5.2.apk"
 
-          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v0.5.1.apk" | grep -E 'classes4.dex|app_icon'
+          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v0.5.2.apk" | grep -E 'classes4.dex|app_icon'
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MiniCoPaTis-v0.5.1
-          path: MiniCoPaTis-v0.5.1.apk
+          name: MiniCoPaTis-v0.5.2
+          path: MiniCoPaTis-v0.5.2.apk
           retention-days: 30
