@@ -111,8 +111,8 @@ jobs:
 
           g = Path("ledgerapp/app/build.gradle")
           gs = g.read_text()
-          gs = gs.replace("versionCode 3", "versionCode 10")
-          gs = gs.replace("versionName '0.3.0'", "versionName '0.5.0'")
+          gs = gs.replace("versionCode 3", "versionCode 11")
+          gs = gs.replace("versionName '0.3.0'", "versionName '0.5.1'")
           g.write_text(gs)
 
           manifest_lines = [
@@ -276,15 +276,15 @@ jobs:
             keytool -genkeypair -v               -keystore "$HOME/.android/debug.keystore"               -storepass android               -alias androiddebugkey               -keypass android               -keyalg RSA               -keysize 2048               -validity 10000               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-key-alias androiddebugkey             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v0.5.0.apk"             /tmp/minicopatis-aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-key-alias androiddebugkey             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v0.5.1.apk"             /tmp/minicopatis-aligned.apk
 
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose             "$GITHUB_WORKSPACE/MiniCoPaTis-v0.5.0.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose             "$GITHUB_WORKSPACE/MiniCoPaTis-v0.5.1.apk"
 
-          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v0.5.0.apk" | grep -E 'classes4.dex|app_icon'
+          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v0.5.1.apk" | grep -E 'classes4.dex|app_icon'
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MiniCoPaTis-v0.5.0
-          path: MiniCoPaTis-v0.5.0.apk
+          name: MiniCoPaTis-v0.5.1
+          path: MiniCoPaTis-v0.5.1.apk
           retention-days: 30
