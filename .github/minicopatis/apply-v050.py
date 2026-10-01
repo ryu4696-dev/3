@@ -71,12 +71,14 @@ marker = '''    fun listSalesDays(
 method = r'''    fun listSalesAll(startDate: String, endDate: String): List<SalesCompanyMonthly> {
         val sql = """
             SELECT d.customer_no,
-                   MAX(d.customer_name) AS customer_name,
+                   COALESCE(NULLIF(MAX(sc.customer_name), ''), d.customer_no) AS customer_name,
                    d.product_no,
                    COALESCE(NULLIF(MAX(p.product_name), ''), NULLIF(MAX(sp.product_name), ''), d.product_no) AS product_name,
                    substr(d.sale_date, 1, 7) AS sale_month,
                    SUM(d.amount), SUM(d.quantity), SUM(d.sqm)
             FROM sales_daily d
+            LEFT JOIN sales_customers sc
+                   ON sc.customer_no = d.customer_no
             LEFT JOIN products p
                    ON p.customer_no = d.customer_no AND p.product_no = d.product_no
             LEFT JOIN sales_products sp
