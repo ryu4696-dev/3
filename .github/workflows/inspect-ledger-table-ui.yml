@@ -27,7 +27,13 @@ jobs:
           git show "$GOOD:.github/ledger-build-0930/part3.b64" > /tmp/p3
           cat /tmp/p1 /tmp/p4 /tmp/p5 /tmp/p2 /tmp/p3 | base64 -d > /tmp/src.tar.bz2
           tar -xjf /tmp/src.tar.bz2
-          echo '===== ProductTableView ====='
-          sed -n '1,420p' ledgerapp/app/src/main/java/jp/co/ichika/salesledger/ProductTableView.kt
+          echo '===== files ====='
+          ls ledgerapp/app/src/main/java/jp/co/ichika/salesledger
+          echo '===== table candidates ====='
+          for F in ledgerapp/app/src/main/java/jp/co/ichika/salesledger/*Table*.kt ledgerapp/app/src/main/java/jp/co/ichika/salesledger/*Ledger*.kt; do
+            [ -f "$F" ] || continue
+            echo "===== $F ====="
+            sed -n '1,440p' "$F"
+          done
           echo '===== Product detail ====='
           sed -n '500,610p' ledgerapp/app/src/main/java/jp/co/ichika/salesledger/MainActivity.kt
