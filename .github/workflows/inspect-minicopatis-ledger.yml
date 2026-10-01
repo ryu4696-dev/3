@@ -1,0 +1,35 @@
+name: Inspect MiniCoPaTis Ledger Source
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/inspect-minicopatis-ledger.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore source and inspect ledger grouping
+        run: |
+          GOOD=7b554590b919359d104d3ab34b067fd52474a37c
+          git show "$GOOD:.github/ledger-build-0930/part1.b64" > /tmp/p1
+          git show "$GOOD:.github/ledger-build-0930/part4.b64" > /tmp/p4
+          git show "$GOOD:.github/ledger-build-0930/part5.b64" > /tmp/p5
+          git show "$GOOD:.github/ledger-build-0930/part2.b64" > /tmp/p2
+          git show "$GOOD:.github/ledger-build-0930/part3.b64" > /tmp/p3
+          cat /tmp/p1 /tmp/p4 /tmp/p5 /tmp/p2 /tmp/p3 > /tmp/ledgerapp.tar.bz2.b64
+          base64 -d /tmp/ledgerapp.tar.bz2.b64 > /tmp/ledgerapp.tar.bz2
+          tar -xjf /tmp/ledgerapp.tar.bz2
+          FILE=ledgerapp/app/src/main/java/jp/co/ichika/salesledger/MainActivity.kt
+          echo "===== grep candidates ====="
+          grep -nE 'substring|split|removeSuffix|indexOf|lastIndexOf|product|品番|ledger|Ledger|customer' "$FILE" | head -300 || true
+          echo "===== suspicious dash grouping ====="
+          grep -nE '[-][0-9]|substringBefore|substringAfter|Regex' "$FILE" | head -200 || true
