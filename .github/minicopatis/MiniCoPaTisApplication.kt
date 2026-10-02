@@ -80,20 +80,20 @@ class MiniCoPaTisApplication : Application(), Application.ActivityLifecycleCallb
             val memoContainer = LinearLayout(activity).apply {
                 tag = MEMO_CONTAINER_TAG
                 orientation = LinearLayout.VERTICAL
+                setPadding(dp(activity, 18), dp(activity, 16), dp(activity, 18), dp(activity, 16))
+                background = roundedRect(activity, Color.WHITE, Color.TRANSPARENT, 0, 16)
             }
             val memoLabel = TextView(activity).apply {
-                text = "企業名・品名・商品詳細など"
+                text = "メモ欄"
                 textSize = 15f
                 setTextColor(Color.rgb(30, 41, 59))
                 setTypeface(typeface, Typeface.BOLD)
-                setPadding(0, 0, 0, dp(activity, 7))
             }
             val memoEdit = EditText(activity).apply {
                 tag = MEMO_EDIT_TAG
-                hint = "例：○○食品様　新商品ケース\n試作用・10月見積 など"
+                hint = ""
                 textSize = 16f
                 setTextColor(Color.rgb(31, 41, 55))
-                setHintTextColor(Color.rgb(148, 163, 184))
                 gravity = Gravity.TOP or Gravity.START
                 minLines = 3
                 maxLines = 5
@@ -101,16 +101,22 @@ class MiniCoPaTisApplication : Application(), Application.ActivityLifecycleCallb
                 inputType = InputType.TYPE_CLASS_TEXT or
                     InputType.TYPE_TEXT_FLAG_MULTI_LINE or
                     InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-                setPadding(dp(activity, 14), dp(activity, 12), dp(activity, 14), dp(activity, 12))
-                background = roundedRect(activity, Color.WHITE, Color.rgb(203, 213, 225), 1, 14)
+                setPadding(0, dp(activity, 10), 0, 0)
+                background = null
             }
             memoContainer.addView(memoLabel, LinearLayout.LayoutParams(-1, -2))
             memoContainer.addView(memoEdit, LinearLayout.LayoutParams(-1, -2))
-            root.addView(
-                memoContainer,
-                0,
-                LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(activity, 18) }
-            )
+
+            val existingDetailCard = reflectedView(activity, "detailCard")
+            val memoLp = LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(activity, 20)
+                bottomMargin = dp(activity, 18)
+            }
+            if (existingDetailCard?.parent === root) {
+                root.addView(memoContainer, root.indexOfChild(existingDetailCard) + 1, memoLp)
+            } else {
+                root.addView(memoContainer, memoLp)
+            }
 
             val showButton = findTextView(root, "金額を見せる")
             val saveButton = TextView(activity).apply {
@@ -137,12 +143,6 @@ class MiniCoPaTisApplication : Application(), Application.ActivityLifecycleCallb
 
     private fun saveQuoteImage(activity: Activity, root: LinearLayout, memoEdit: EditText) {
         val memo = memoEdit.text?.toString()?.trim().orEmpty()
-        if (memo.isBlank()) {
-            Toast.makeText(activity, "企業名・品名・商品詳細などを入力してください", Toast.LENGTH_SHORT).show()
-            memoEdit.requestFocus()
-            return
-        }
-
         findTextView(root, "計算する")?.performClick()
         root.postDelayed({
             runCatching {
@@ -186,14 +186,6 @@ class MiniCoPaTisApplication : Application(), Application.ActivityLifecycleCallb
             setPadding(dp(activity, 28), dp(activity, 30), dp(activity, 28), dp(activity, 30))
             setBackgroundColor(Color.rgb(247, 243, 234))
         }
-
-        outer.addView(TextView(activity).apply {
-            text = memo
-            textSize = 24f
-            setTextColor(Color.rgb(15, 23, 42))
-            setTypeface(typeface, Typeface.BOLD)
-            setLineSpacing(dp(activity, 3).toFloat(), 1.06f)
-        }, fullWidthWrap().apply { bottomMargin = dp(activity, 18) })
 
         val length = findEditTextByHint(quoteRoot, "長")?.text?.toString().orEmpty()
         val width = findEditTextByHint(quoteRoot, "巾")?.text?.toString().orEmpty()
@@ -250,7 +242,23 @@ class MiniCoPaTisApplication : Application(), Application.ActivityLifecycleCallb
                 setPadding(0, dp(activity, 14), 0, 0)
             })
         }
-        outer.addView(detailCard, fullWidthWrap())
+        outer.addView(detailCard, fullWidthWrap().apply { bottomMargin = dp(activity, 16) })
+
+        val memoCard = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(activity, 22), dp(activity, 20), dp(activity, 22), dp(activity, 20))
+            background = roundedRect(activity, Color.WHITE, Color.TRANSPARENT, 0, 18)
+        }
+        memoCard.addView(sectionTitle(activity, "メモ欄"))
+        memoCard.addView(TextView(activity).apply {
+            text = memo
+            textSize = 15f
+            setTextColor(Color.rgb(31, 41, 55))
+            setLineSpacing(dp(activity, 2).toFloat(), 1.08f)
+            setPadding(0, dp(activity, 10), 0, 0)
+            minLines = 3
+        })
+        outer.addView(memoCard, fullWidthWrap())
         return outer
     }
 
