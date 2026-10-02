@@ -196,6 +196,7 @@ jobs:
           python3 .github/minicopatis/apply-v053-dimension-notation.py
           python3 .github/minicopatis/apply-v054-inner-label.py
           python3 .github/minicopatis/apply-v055-lot-tiers.py
+          python3 .github/minicopatis/apply-v061-sales-drilldown.py
           cp .github/minicopatis/AllSalesTableView.kt \
             ledgerapp/app/src/main/java/jp/co/ichika/salesledger/AllSalesTableView.kt
 
