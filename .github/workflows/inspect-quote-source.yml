@@ -1,0 +1,38 @@
+name: Inspect Quote Source
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/inspect-quote-source.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore quote dex
+        run: |
+          mkdir -p /tmp/q
+          cat .github/minicopatis/quote-dex-*.b64 | base64 -d > /tmp/q/classes3.dex.bz2
+          bunzip2 -c /tmp/q/classes3.dex.bz2 > /tmp/q/classes3.dex
+          sha256sum /tmp/q/classes3.dex
+      - name: Download jadx
+        run: |
+          curl -L --fail -o /tmp/jadx.zip https://github.com/skylot/jadx/releases/download/v1.5.1/jadx-1.5.1.zip
+          unzip -q /tmp/jadx.zip -d /tmp/jadx
+      - name: Decompile quote classes
+        run: |
+          /tmp/jadx/bin/jadx --show-bad-code -d /tmp/out /tmp/q/classes3.dex >/tmp/jadx.log 2>&1 || true
+          echo '===== QuoteActivity ====='
+          sed -n '1,420p' /tmp/out/sources/jp/co/kobayashi/cardboardquote/QuoteActivity.java || true
+          echo '===== QuoteResult ====='
+          sed -n '1,260p' /tmp/out/sources/jp/co/kobayashi/cardboardquote/QuoteResult.java || true
+          echo '===== Calculator ====='
+          sed -n '1,420p' /tmp/out/sources/jp/co/kobayashi/cardboardquote/Calculator.java || true
+          echo '===== MainActivity quote launch ====='
+          grep -Rni "QuoteActivity" /tmp/out/sources/jp/co/kobayashi/cardboardquote | head -50 || true
