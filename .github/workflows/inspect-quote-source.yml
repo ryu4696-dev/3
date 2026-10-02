@@ -34,5 +34,5 @@ jobs:
           sed -n '1,260p' /tmp/out/sources/jp/co/kobayashi/cardboardquote/QuoteResult.java || true
           echo '===== Calculator ====='
           sed -n '1,420p' /tmp/out/sources/jp/co/kobayashi/cardboardquote/Calculator.java || true
-          echo '===== MainActivity quote launch ====='
-          grep -Rni "QuoteActivity" /tmp/out/sources/jp/co/kobayashi/cardboardquote | head -50 || true
+          echo '===== MainActivity calculation details ====='
+          grep -n -A180 -B40 "計算詳細" /tmp/out/sources/jp/co/kobayashi/cardboardquote/MainActivity.java || true
