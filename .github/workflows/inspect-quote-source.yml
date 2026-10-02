@@ -36,3 +36,8 @@ jobs:
           sed -n '1,420p' /tmp/out/sources/jp/co/kobayashi/cardboardquote/Calculator.java || true
           echo '===== MainActivity calculation details ====='
           grep -n -A180 -B40 "計算詳細" /tmp/out/sources/jp/co/kobayashi/cardboardquote/MainActivity.java || true
+      - name: Upload decompiled MainActivity
+        uses: actions/upload-artifact@v4
+        with:
+          name: quote-mainactivity-source
+          path: /tmp/out/sources/jp/co/kobayashi/cardboardquote/MainActivity.java
