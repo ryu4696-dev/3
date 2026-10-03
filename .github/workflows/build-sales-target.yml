@@ -29,22 +29,7 @@ jobs:
           mkdir -p /tmp/salestarget
           cat .github/salestarget/chunk00 .github/salestarget/chunk01 .github/salestarget/chunk02 .github/salestarget/chunk03 .github/salestarget/chunk04 | base64 -d > /tmp/salestarget.zip
           unzip -q /tmp/salestarget.zip -d /tmp/salestarget
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('/tmp/salestarget/app/build.gradle.kts')
-          s=p.read_text()
-          needle='    compileSdk = 35\n'
-          patch='''    compileSdk = 35
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-'''
-          if 'sourceCompatibility = JavaVersion.VERSION_17' not in s:
-              s=s.replace(needle, patch)
-          p.write_text(s)
-          PY
+          python3 -c 'from pathlib import Path; p=Path("/tmp/salestarget/app/build.gradle.kts"); s=p.read_text(); s=s.replace("    compileSdk = 35\n","    compileSdk = 35\n\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n    }\n"); p.write_text(s)'
       - name: Build release APK
         working-directory: /tmp/salestarget
         shell: bash
