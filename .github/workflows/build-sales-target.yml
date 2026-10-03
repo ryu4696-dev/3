@@ -25,9 +25,26 @@ jobs:
           gradle-version: '8.10.2'
       - name: Restore project
         run: |
+          rm -rf /tmp/salestarget
           mkdir -p /tmp/salestarget
           cat .github/salestarget/chunk00 .github/salestarget/chunk01 .github/salestarget/chunk02 .github/salestarget/chunk03 .github/salestarget/chunk04 | base64 -d > /tmp/salestarget.zip
           unzip -q /tmp/salestarget.zip -d /tmp/salestarget
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/salestarget/app/build.gradle.kts')
+          s=p.read_text()
+          needle='    compileSdk = 35\n'
+          patch='''    compileSdk = 35
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+'''
+          if 'sourceCompatibility = JavaVersion.VERSION_17' not in s:
+              s=s.replace(needle, patch)
+          p.write_text(s)
+          PY
       - name: Build release APK
         working-directory: /tmp/salestarget
         shell: bash
@@ -48,12 +65,13 @@ jobs:
             base64 -w0 /tmp/salestarget/app/build/outputs/apk/release/app-release.apk > .github/salestarget/SalesTarget-v1.0.apk.b64
             echo "success" > .github/salestarget/result-status.txt
           else
+            rm -f .github/salestarget/SalesTarget-v1.0.apk.b64
             echo "failed" > .github/salestarget/result-status.txt
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/salestarget/result-build.log .github/salestarget/result-exit.txt .github/salestarget/result-status.txt
-          [ -f .github/salestarget/SalesTarget-v1.0.apk.b64 ] && git add .github/salestarget/SalesTarget-v1.0.apk.b64 || true
+          if [ -f .github/salestarget/SalesTarget-v1.0.apk.b64 ]; then git add .github/salestarget/SalesTarget-v1.0.apk.b64; else git rm --cached -f .github/salestarget/SalesTarget-v1.0.apk.b64 2>/dev/null || true; fi
           git commit -m "Publish SalesTarget build result" || exit 0
           git push
       - name: Upload APK artifact
