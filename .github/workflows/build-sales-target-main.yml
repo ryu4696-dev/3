@@ -46,6 +46,7 @@ jobs:
         run: |
           cp /tmp/salestarget-build.log .github/salestarget/result-build.log || true
           cp /tmp/salestarget-build.exit .github/salestarget/result-exit.txt || echo 999 > .github/salestarget/result-exit.txt
+          echo "$GITHUB_RUN_ID" > .github/salestarget/result-run-id.txt
           if [ -f /tmp/salestarget/app/build/outputs/apk/release/app-release.apk ]; then
             base64 -w0 /tmp/salestarget/app/build/outputs/apk/release/app-release.apk > .github/salestarget/SalesTarget-v1.0.apk.b64
             echo "success" > .github/salestarget/result-status.txt
@@ -55,7 +56,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/salestarget/result-build.log .github/salestarget/result-exit.txt .github/salestarget/result-status.txt
+          git add .github/salestarget/result-build.log .github/salestarget/result-exit.txt .github/salestarget/result-run-id.txt .github/salestarget/result-status.txt
           if [ -f .github/salestarget/SalesTarget-v1.0.apk.b64 ]; then git add .github/salestarget/SalesTarget-v1.0.apk.b64; else git rm --cached -f .github/salestarget/SalesTarget-v1.0.apk.b64 2>/dev/null || true; fi
           git commit -m "Publish SalesTarget build result" || exit 0
           git push origin HEAD:sales-target
