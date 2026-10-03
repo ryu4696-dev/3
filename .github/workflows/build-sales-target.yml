@@ -3,7 +3,12 @@ name: Build Sales Target APK
 on:
   push:
     branches: [ "sales-target" ]
+    paths-ignore:
+      - ".github/salestarget/SalesTarget-v1.0.apk.b64"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -25,9 +30,17 @@ jobs:
       - name: Build release APK
         working-directory: /tmp/salestarget
         run: gradle assembleRelease --stacktrace
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: SalesTarget-v1.0
           path: /tmp/salestarget/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
+      - name: Publish APK for retrieval
+        run: |
+          base64 -w0 /tmp/salestarget/app/build/outputs/apk/release/app-release.apk > .github/salestarget/SalesTarget-v1.0.apk.b64
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/salestarget/SalesTarget-v1.0.apk.b64
+          git commit -m "Publish SalesTarget v1.0 APK" || exit 0
+          git push
