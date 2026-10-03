@@ -14,7 +14,6 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:processReleaseMainManifest
 > Task :app:parseReleaseLocalResources
 > Task :app:processReleaseManifest
-> Task :app:processReleaseManifestForPackage
 > Task :app:javaPreCompileRelease
 > Task :app:extractProguardFiles
 > Task :app:mergeReleaseJniLibFolders
@@ -23,6 +22,7 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:extractReleaseNativeSymbolTables NO-SOURCE
 > Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
 > Task :app:desugarReleaseFileDependencies
+> Task :app:processReleaseManifestForPackage
 > Task :app:checkReleaseDuplicateClasses
 > Task :app:mergeReleaseStartupProfile
 > Task :app:mergeReleaseArtProfile
@@ -35,16 +35,12 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:extractReleaseVersionControlInfo
 > Task :app:collectReleaseDependencies
 > Task :app:sdkReleaseDependencyData
-> Task :app:optimizeReleaseResources
 > Task :app:validateSigningRelease
 > Task :app:writeReleaseAppMetadata
+> Task :app:optimizeReleaseResources
 > Task :app:writeReleaseSigningConfigVersions
 > Task :app:mergeExtDexRelease
-
 > Task :app:compileReleaseKotlin
-e: The daemon has terminated unexpectedly on startup attempt #1 with error code: 0. The daemon process output:
-    1. Kotlin compile daemon is ready
-
 > Task :app:compileReleaseJavaWithJavac NO-SOURCE
 > Task :app:generateReleaseLintVitalReportModel
 > Task :app:dexBuilderRelease
@@ -59,7 +55,7 @@ e: The daemon has terminated unexpectedly on startup attempt #1 with error code:
 > Task :app:lintVitalReportRelease
 > Task :app:lintVitalRelease
 > Task :app:assembleRelease
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_2-1791036623567.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_2-1791036716400.json
 
-BUILD SUCCESSFUL in 38s
+BUILD SUCCESSFUL in 34s
 45 actionable tasks: 45 executed
