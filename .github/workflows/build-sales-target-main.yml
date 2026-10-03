@@ -45,6 +45,8 @@ jobs:
         if: always()
         shell: bash
         run: |
+          git fetch origin sales-target
+          git reset --hard origin/sales-target
           cp /tmp/salestarget-build.log .github/salestarget/result-build.log || true
           cp /tmp/salestarget-build.exit .github/salestarget/result-exit.txt || echo 999 > .github/salestarget/result-exit.txt
           echo "$GITHUB_RUN_ID" > .github/salestarget/result-run-id.txt
