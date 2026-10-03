@@ -4,6 +4,7 @@ on:
   push:
     branches: [ "sales-target" ]
     paths-ignore:
+      - ".github/salestarget/result-*"
       - ".github/salestarget/SalesTarget-v1.0.apk.b64"
   workflow_dispatch:
 
@@ -29,18 +30,37 @@ jobs:
           unzip -q /tmp/salestarget.zip -d /tmp/salestarget
       - name: Build release APK
         working-directory: /tmp/salestarget
-        run: gradle assembleRelease --stacktrace
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          gradle assembleRelease --stacktrace 2>&1 | tee /tmp/salestarget-build.log
+          code=${PIPESTATUS[0]}
+          echo "$code" > /tmp/salestarget-build.exit
+          exit 0
+      - name: Publish result
+        if: always()
+        shell: bash
+        run: |
+          cp /tmp/salestarget-build.log .github/salestarget/result-build.log || true
+          cp /tmp/salestarget-build.exit .github/salestarget/result-exit.txt || echo 999 > .github/salestarget/result-exit.txt
+          if [ -f /tmp/salestarget/app/build/outputs/apk/release/app-release.apk ]; then
+            base64 -w0 /tmp/salestarget/app/build/outputs/apk/release/app-release.apk > .github/salestarget/SalesTarget-v1.0.apk.b64
+            echo "success" > .github/salestarget/result-status.txt
+          else
+            echo "failed" > .github/salestarget/result-status.txt
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/salestarget/result-build.log .github/salestarget/result-exit.txt .github/salestarget/result-status.txt
+          [ -f .github/salestarget/SalesTarget-v1.0.apk.b64 ] && git add .github/salestarget/SalesTarget-v1.0.apk.b64 || true
+          git commit -m "Publish SalesTarget build result" || exit 0
+          git push
       - name: Upload APK artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: SalesTarget-v1.0
           path: /tmp/salestarget/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: ignore
           retention-days: 30
-      - name: Publish APK for retrieval
-        run: |
-          base64 -w0 /tmp/salestarget/app/build/outputs/apk/release/app-release.apk > .github/salestarget/SalesTarget-v1.0.apk.b64
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/salestarget/SalesTarget-v1.0.apk.b64
-          git commit -m "Publish SalesTarget v1.0 APK" || exit 0
-          git push
