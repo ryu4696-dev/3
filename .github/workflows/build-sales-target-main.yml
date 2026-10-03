@@ -29,6 +29,7 @@ jobs:
           mkdir -p /tmp/salestarget
           cat .github/salestarget/chunk00 .github/salestarget/chunk01 .github/salestarget/chunk02 .github/salestarget/chunk03 .github/salestarget/chunk04 | base64 -d > /tmp/salestarget.zip
           unzip -q /tmp/salestarget.zip -d /tmp/salestarget
+          python3 .github/salestarget/apply-v11.py
           python3 -c 'from pathlib import Path; p=Path("/tmp/salestarget/app/build.gradle.kts"); s=p.read_text(); s=s.replace("    compileSdk = 35\n","    compileSdk = 35\n\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n    }\n"); p.write_text(s)'
       - name: Build release APK
         working-directory: /tmp/salestarget
@@ -48,23 +49,23 @@ jobs:
           cp /tmp/salestarget-build.exit .github/salestarget/result-exit.txt || echo 999 > .github/salestarget/result-exit.txt
           echo "$GITHUB_RUN_ID" > .github/salestarget/result-run-id.txt
           if [ -f /tmp/salestarget/app/build/outputs/apk/release/app-release.apk ]; then
-            base64 -w0 /tmp/salestarget/app/build/outputs/apk/release/app-release.apk > .github/salestarget/SalesTarget-v1.0.apk.b64
+            base64 -w0 /tmp/salestarget/app/build/outputs/apk/release/app-release.apk > .github/salestarget/SalesTarget-v1.1.apk.b64
             echo "success" > .github/salestarget/result-status.txt
           else
-            rm -f .github/salestarget/SalesTarget-v1.0.apk.b64
+            rm -f .github/salestarget/SalesTarget-v1.1.apk.b64
             echo "failed" > .github/salestarget/result-status.txt
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/salestarget/result-build.log .github/salestarget/result-exit.txt .github/salestarget/result-run-id.txt .github/salestarget/result-status.txt
-          if [ -f .github/salestarget/SalesTarget-v1.0.apk.b64 ]; then git add .github/salestarget/SalesTarget-v1.0.apk.b64; else git rm --cached -f .github/salestarget/SalesTarget-v1.0.apk.b64 2>/dev/null || true; fi
-          git commit -m "Publish SalesTarget build result" || exit 0
+          if [ -f .github/salestarget/SalesTarget-v1.1.apk.b64 ]; then git add .github/salestarget/SalesTarget-v1.1.apk.b64; else git rm --cached -f .github/salestarget/SalesTarget-v1.1.apk.b64 2>/dev/null || true; fi
+          git commit -m "Publish SalesTarget v1.1 build result" || exit 0
           git push origin HEAD:sales-target
       - name: Upload APK artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SalesTarget-v1.0
+          name: SalesTarget-v1.1
           path: /tmp/salestarget/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: ignore
           retention-days: 30
