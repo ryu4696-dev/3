@@ -1,0 +1,33 @@
+name: Build Sales Target APK
+
+on:
+  push:
+    branches: [ "sales-target" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Restore project
+        run: |
+          mkdir -p /tmp/salestarget
+          cat .github/salestarget/chunk00 .github/salestarget/chunk01 .github/salestarget/chunk02 .github/salestarget/chunk03 .github/salestarget/chunk04 | base64 -d > /tmp/salestarget.zip
+          unzip -q /tmp/salestarget.zip -d /tmp/salestarget
+      - name: Build release APK
+        working-directory: /tmp/salestarget
+        run: gradle assembleRelease --stacktrace
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SalesTarget-v1.0
+          path: /tmp/salestarget/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
