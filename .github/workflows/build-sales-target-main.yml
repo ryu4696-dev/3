@@ -1,0 +1,69 @@
+name: Build Sales Target APK Main
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/build-sales-target-main.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: sales-target
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Restore project
+        run: |
+          rm -rf /tmp/salestarget
+          mkdir -p /tmp/salestarget
+          cat .github/salestarget/chunk00 .github/salestarget/chunk01 .github/salestarget/chunk02 .github/salestarget/chunk03 .github/salestarget/chunk04 | base64 -d > /tmp/salestarget.zip
+          unzip -q /tmp/salestarget.zip -d /tmp/salestarget
+          python3 -c 'from pathlib import Path; p=Path("/tmp/salestarget/app/build.gradle.kts"); s=p.read_text(); s=s.replace("    compileSdk = 35\n","    compileSdk = 35\n\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n    }\n"); p.write_text(s)'
+      - name: Build release APK
+        working-directory: /tmp/salestarget
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          gradle assembleRelease --stacktrace 2>&1 | tee /tmp/salestarget-build.log
+          code=${PIPESTATUS[0]}
+          echo "$code" > /tmp/salestarget-build.exit
+          exit 0
+      - name: Publish result to sales-target
+        if: always()
+        shell: bash
+        run: |
+          cp /tmp/salestarget-build.log .github/salestarget/result-build.log || true
+          cp /tmp/salestarget-build.exit .github/salestarget/result-exit.txt || echo 999 > .github/salestarget/result-exit.txt
+          if [ -f /tmp/salestarget/app/build/outputs/apk/release/app-release.apk ]; then
+            base64 -w0 /tmp/salestarget/app/build/outputs/apk/release/app-release.apk > .github/salestarget/SalesTarget-v1.0.apk.b64
+            echo "success" > .github/salestarget/result-status.txt
+          else
+            rm -f .github/salestarget/SalesTarget-v1.0.apk.b64
+            echo "failed" > .github/salestarget/result-status.txt
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/salestarget/result-build.log .github/salestarget/result-exit.txt .github/salestarget/result-status.txt
+          if [ -f .github/salestarget/SalesTarget-v1.0.apk.b64 ]; then git add .github/salestarget/SalesTarget-v1.0.apk.b64; else git rm --cached -f .github/salestarget/SalesTarget-v1.0.apk.b64 2>/dev/null || true; fi
+          git commit -m "Publish SalesTarget build result" || exit 0
+          git push origin HEAD:sales-target
+      - name: Upload APK artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SalesTarget-v1.0
+          path: /tmp/salestarget/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: ignore
+          retention-days: 30
