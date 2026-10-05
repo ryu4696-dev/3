@@ -42,9 +42,20 @@ if 'android:name=".SalesDashboardActivity"' not in m:
 
 # Android 15 draws edge-to-edge by default. Keep app content below status/navigation bars.
 for activity_name in ('.MainActivity', '.SalesDashboardActivity'):
+    def add_theme(match):
+        attrs = match.group('attrs')
+        if 'android:theme=' in attrs:
+            return match.group(0)
+        self_closing = attrs.rstrip().endswith('/')
+        if self_closing:
+            attrs = attrs.rstrip()[:-1].rstrip()
+        attrs += ' android:theme="@style/QuoteCompatTheme"'
+        if self_closing:
+            attrs += ' /'
+        return '<activity' + attrs + '>'
     m = re.sub(
         r'<activity(?P<attrs>[^>]*android:name="' + re.escape(activity_name) + r'"[^>]*)>',
-        lambda match: '<activity' + match.group('attrs') + (' android:theme="@style/QuoteCompatTheme"' if 'android:theme=' not in match.group('attrs') else '') + '>',
+        add_theme,
         m,
         count=1,
         flags=re.S,
