@@ -12,6 +12,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.HorizontalScrollView
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -28,8 +29,10 @@ class SalesDashboardActivity : Activity() {
     private val money = DecimalFormat("#,##0.0")
     private var filter = ""
     private var orderContainer: LinearLayout? = null
-    private var selectedTab = 0
-    private var targetCustomer = "全体"
+    private var selectedCategory = "合計"
+    private var selectedMetric = "金額"
+    private var expandedCustomer = "全体"
+    private var lastScrollY = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,57 +43,106 @@ class SalesDashboardActivity : Activity() {
     }
 
     private fun render() {
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(246,248,251)) }
-        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(16,12,16,12); setBackgroundColor(Color.WHITE) }
-        val back = label("‹ 戻る",16f,Color.rgb(15,91,70),true).apply { setOnClickListener { finish() } }
-        top.addView(back)
-        top.addView(label("販売目標・受注",20f,Color.rgb(15,23,42),true), LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin=18 })
+        val ordersOnly = intent.getBooleanExtra("orders_only", false)
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(246, 248, 251)) }
+        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(16, 12, 16, 12); setBackgroundColor(Color.WHITE) }
+        top.addView(label("‹ 戻る", 16f, Color.rgb(15, 91, 70), true).apply { setOnClickListener { finish() } })
+        top.addView(label(if (ordersOnly) "受注情報" else "販売目標", 20f, Color.rgb(15, 23, 42), true), LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = 18 })
         root.addView(top)
-        val tabs = LinearLayout(this).apply { setPadding(12,10,12,10); setBackgroundColor(Color.WHITE) }
-        listOf("目標と実績","受注情報").forEachIndexed { i, title ->
-            val b = button(title, i==selectedTab).apply { setOnClickListener { selectedTab=i; render() } }
-            tabs.addView(b, LinearLayout.LayoutParams(0,46,1f).apply { leftMargin=4; rightMargin=4 })
-        }
-        root.addView(tabs)
         val scroll = ScrollView(this)
-        val body = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(14,14,14,24) }
-        if (selectedTab==0) renderPerformance(body) else renderOrders(body)
-        scroll.addView(body); root.addView(scroll, LinearLayout.LayoutParams(-1,0,1f))
+        scroll.setOnScrollChangeListener { _, _, y, _, _ -> if (!ordersOnly) lastScrollY = y }
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(14, 14, 14, 24) }
+        if (ordersOnly) renderOrders(body) else renderPerformance(body)
+        scroll.addView(body)
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
+        if (!ordersOnly) scroll.post { scroll.scrollTo(0, lastScrollY) }
     }
 
     private fun renderPerformance(body: LinearLayout) {
-        val c = card()
-        c.addView(label("データを読み込む",18f,Color.rgb(15,23,42),true))
-        c.addView(label("Excel・CSVを選ぶと、この画面で更新します。",13f,Color.DKGRAY,false).apply { setPadding(0,7,0,10) })
-        c.addView(button("販売目標表（Excel）を読み込む", false).apply { setOnClickListener { choose(11, "application/vnd.ms-excel") } })
-        c.addView(button("売上実績（CSV）を読み込む", false).apply { setOnClickListener { choose(12, "text/*") } }.also { (it.layoutParams as? LinearLayout.LayoutParams)?.topMargin=8 })
-        c.addView(button("対象：$targetCustomer を変更", false).apply { setOnClickListener { chooseCustomer() } })
-        body.addView(c, margin())
-        body.addView(section("実績 / 目標（$targetCustomer）"))
-        val categories = listOf("段ボール","商品","版代型代","運賃","その他")
-        val months = months()
-        for (cat in categories) {
-            val targetAmount = sum("sd_target","category=? AND customer_no=? AND metric='金額' AND month IN (${months.joinToString { "?" }})", listOf(cat,targetCustomer)+months)
-            val actual = actuals(cat, months, targetCustomer)
-            val targetArea = sum("sd_target","category=? AND customer_no=? AND metric='平米' AND month IN (${months.joinToString { "?" }})", listOf(cat,targetCustomer)+months)
-            val card=card()
-            card.addView(label(cat,17f,Color.rgb(15,91,70),true))
-            card.addView(label("金額　${money.format(actual.first/1000)} / ${if(targetAmount==0.0) "—" else "${money.format(targetAmount)} 千円"}",15f,Color.rgb(30,41,59),true).apply { setPadding(0,9,0,4) })
-            val pct=if(targetAmount>0) "　(${money.format(actual.first/1000/targetAmount*100)}%)" else ""
-            card.addView(label("実績 ${money.format(actual.first/1000)} 千円$pct",12f,Color.DKGRAY,false))
-            val areaLine=if(targetArea>0) "平米　${money.format(actual.second/1000)} / ${money.format(targetArea)} 千㎡" else "平米　${money.format(actual.second/1000)} 千㎡　/ 目標なし"
-            card.addView(label(areaLine,13f,Color.DKGRAY,false).apply { setPadding(0,5,0,0) })
-            body.addView(card,margin())
+        val imports = card()
+        imports.addView(label("販売データ", 17f, Color.rgb(15, 23, 42), true))
+        imports.addView(label("目標表と売上CSVを読み込みます。受注情報とは別画面です。", 12.5f, Color.GRAY, false).apply { setPadding(0, 5, 0, 8) })
+        imports.addView(button("販売目標表（Excel）を読み込む", false).apply { setOnClickListener { choose(11, "application/vnd.ms-excel") } })
+        imports.addView(button("売上実績（CSV）を読み込む", false).apply { setOnClickListener { choose(12, "text/*") } })
+        body.addView(imports, margin())
+
+        val categories = listOf("合計", "段ボール", "商品", "版代型代", "運賃", "その他")
+        val categoryRail = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(6, 6, 6, 6); background = rounded(Color.rgb(238, 240, 247)) }
+        val categoryScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+        categories.forEach { item ->
+            val label = TextView(this).apply {
+                text = item; gravity = Gravity.CENTER; textSize = 12f; setPadding(14, 10, 14, 10)
+                setTextColor(if (item == selectedCategory) Color.rgb(52, 81, 200) else Color.rgb(89, 97, 116))
+                background = rounded(if (item == selectedCategory) Color.WHITE else Color.TRANSPARENT)
+                setOnClickListener { selectedCategory = item; render() }
+            }
+            categoryRail.addView(label)
         }
-        body.addView(label("表示単位：金額 千円、平米 千㎡。実績は売上CSVの読み込み後に表示されます。",11f,Color.GRAY,false).apply { setPadding(4,2,4,8) })
-    }
+        categoryScroll.addView(categoryRail)
+        val catCard = card().apply { addView(categoryScroll) }
+        body.addView(catCard, margin())
 
+        val unitRail = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf("金額", "平米").forEach { item ->
+            unitRail.addView(button(item, item == selectedMetric).apply { setOnClickListener { selectedMetric = item; render() } }, LinearLayout.LayoutParams(0, 44, 1f).apply { leftMargin = 4; rightMargin = 4 })
+        }
+        val unitCard = card().apply { addView(unitRail) }
+        body.addView(unitCard, margin())
 
-    private fun chooseCustomer() {
-        val values= mutableListOf("全体")
-        db.rawQuery("SELECT DISTINCT customer_no FROM sd_target WHERE customer_no<>'全体' ORDER BY customer_no",null).use { while(it.moveToNext()) values+=it.getString(0) }
-        android.app.AlertDialog.Builder(this).setTitle("対象を選択").setItems(values.toTypedArray()) { _, which -> targetCustomer=values[which];render() }.show()
+        val months = months()
+        val allTarget = monthTotal("sd_target", "全体", months, selectedMetric, selectedCategory)
+        val allActual = monthTotal("sd_actual", "全体", months, selectedMetric, selectedCategory)
+        val summary = card().apply {
+            background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(Color.rgb(50, 65, 160), Color.rgb(105, 125, 234))).apply { cornerRadius = 22f }
+        }
+        summary.addView(label("全社 / 2026年度 / $selectedCategory / $selectedMetric", 13f, Color.rgb(229, 234, 255), true))
+        val values = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, 10, 0, 0) }
+        listOf("目標" to shown(allTarget), "実績" to shown(allActual), "達成率" to percent(allActual, allTarget)).forEach { (name, value) ->
+            val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            cell.addView(label(name, 11f, Color.rgb(225, 230, 255), false))
+            cell.addView(label(value, 17f, Color.WHITE, true).apply { setPadding(0, 3, 0, 0) })
+            values.addView(cell, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        summary.addView(values)
+        body.addView(summary, margin())
+        body.addView(label("全社・得意先別　タップすると月別に展開", 16f, Color.rgb(15, 23, 42), true).apply { setPadding(4, 4, 4, 10) })
+
+        val companies = mutableListOf<Pair<String, String>>("全体" to "全社")
+        db.rawQuery("SELECT customer_no,MAX(customer_name) FROM sd_target WHERE customer_no<>'全体' GROUP BY customer_no ORDER BY MAX(customer_name)", null).use {
+            while (it.moveToNext()) companies += it.getString(0) to it.getString(1).ifBlank { it.getString(0) }
+        }
+        val known = companies.map { it.first }.toSet()
+        db.rawQuery("SELECT customer_no FROM sd_actual WHERE customer_no<>'全体' GROUP BY customer_no ORDER BY customer_no", null).use { while (it.moveToNext()) if (it.getString(0) !in known) companies += it.getString(0) to it.getString(0) }
+        companies.forEach { (no, name) ->
+            val target = monthTotal("sd_target", no, months, selectedMetric, selectedCategory)
+            val actual = monthTotal("sd_actual", no, months, selectedMetric, selectedCategory)
+            val open = expandedCustomer == no
+            val item = card().apply { setOnClickListener { expandedCustomer = if (open) "" else no; render() } }
+            val head = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+            head.addView(label(if (no == "全体") "全社" else "${name}社", 17f, Color.rgb(15, 23, 42), true), LinearLayout.LayoutParams(0, -2, 1f))
+            head.addView(label("${shown(actual)} / ${if (target > 0) shown(target) else "—"} $unitLabel", 12f, Color.rgb(47, 58, 81), true))
+            head.addView(label(if (open) "　⌃" else "　⌄", 18f, Color.GRAY, true))
+            item.addView(head)
+            item.addView(label("目標 ${if (target > 0) shown(target) else "—"}　実績 ${shown(actual)}　達成率 ${percent(actual, target)}", 12f, Color.GRAY, false).apply { setPadding(0, 6, 0, 0) })
+            if (open) {
+                item.addView(TextView(this).apply { setBackgroundColor(Color.rgb(229, 233, 241)); layoutParams = LinearLayout.LayoutParams(-1, 1).apply { topMargin = 10; bottomMargin = 6 } })
+                val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(2, 4, 2, 6) }
+                listOf("月", "目標", "実績", "達成率").forEach { heading.addView(label(it, 10.5f, Color.GRAY, true), LinearLayout.LayoutParams(0, -2, 1f).apply { if (it != "月") gravity = Gravity.END }) }
+                item.addView(heading)
+                months.forEachIndexed { index, month ->
+                    val t = oneValue("sd_target", no, month, selectedMetric, selectedCategory)
+                    val a = oneValue("sd_actual", no, month, selectedMetric, selectedCategory)
+                    val line = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(2, 7, 2, 7); if (index % 2 == 0) setBackgroundColor(Color.rgb(247, 248, 252)) }
+                    line.addView(label(month.substring(5).toInt().toString() + "月", 11f, Color.DKGRAY, false), LinearLayout.LayoutParams(0, -2, 1f))
+                    line.addView(label(if (t > 0) shown(t) else "—", 11f, Color.DKGRAY, false), LinearLayout.LayoutParams(0, -2, 1f).apply { gravity = Gravity.END })
+                    line.addView(label(shown(a), 11f, Color.DKGRAY, true), LinearLayout.LayoutParams(0, -2, 1f).apply { gravity = Gravity.END })
+                    line.addView(label(percent(a, t), 11f, if (t > 0 && a >= t) Color.rgb(20, 125, 79) else Color.rgb(175, 113, 25), true), LinearLayout.LayoutParams(0, -2, 1f).apply { gravity = Gravity.END })
+                    item.addView(line)
+                }
+            }
+            body.addView(item, margin())
+        }
     }
 
     private fun renderOrders(body: LinearLayout) {
@@ -185,6 +237,47 @@ class SalesDashboardActivity : Activity() {
         val db=db;db.beginTransaction();try{db.delete("sd_order",null,null);all.forEach{r->db.insert("sd_order",null,ContentValues().apply{put("category",r[0]);put("delivery",r[1]);put("customer",r[2]);put("item",r[3]);put("qty",r[4]);put("amount",r[5].toDoubleOrNull()?:0.0);put("sqm",r[6].toDoubleOrNull()?:0.0);put("sales",r[7]);put("receiver",r[8])})};db.setTransactionSuccessful()}finally{db.endTransaction()}
     }
 
+    private val unitLabel get() = if (selectedMetric == "金額") "千円" else "千㎡"
+    private fun rounded(color:Int)=android.graphics.drawable.GradientDrawable().apply{setColor(color);cornerRadius=14f}
+    private fun shown(v:Double)=if(selectedMetric=="金額") money.format(v/1000) else DecimalFormat("#,##0.0").format(v/1000)
+    private fun percent(a:Double,t:Double)=if(t>0) "${DecimalFormat("0.0").format(a/t*100)}%" else "—"
+    private fun metricKey()=if(selectedMetric=="金額") "金額" else "平米"
+    private fun monthTotal(table:String,no:String,months:List<String>,metric:String,cat:String):Double {
+        val field=if(table=="sd_target") "value" else if(metric=="金額") "amount" else "sqm"
+        val where=StringBuilder("customer_no=? AND month IN (${months.joinToString { "?" }})")
+        val args= mutableListOf(no).apply{addAll(months)}
+        if(cat!="合計"){where.append(" AND category=?");args.add(cat)}
+        if(table=="sd_target"){where.append(" AND metric=?");args.add(if(metric=="金額")"金額" else "平米")}
+        var result=0.0;db.rawQuery("SELECT SUM($field) FROM $table WHERE $where",args.toTypedArray()).use{if(it.moveToFirst())result=it.getDouble(0)};return result
+    }
+    private fun oneValue(table:String,no:String,month:String,metric:String,cat:String):Double {
+        val field=if(table=="sd_target") "value" else if(metric=="金額") "amount" else "sqm"
+        val where=StringBuilder("customer_no=? AND month=?");val args= mutableListOf(no,month)
+        if(cat!="合計"){where.append(" AND category=?");args.add(cat)}
+        if(table=="sd_target"){where.append(" AND metric=?");args.add(if(metric=="金額")"金額" else "平米")}
+        var result=0.0;db.rawQuery("SELECT SUM($field) FROM $table WHERE $where",args.toTypedArray()).use{if(it.moveToFirst())result=it.getDouble(0)};return result
+    }
+
+    private fun rounded(color:Int)=android.graphics.drawable.GradientDrawable().apply{setColor(color);cornerRadius=16f}
+    private val unitLabel get() = if(selectedMetric=="金額") "千円" else "千㎡"
+    private fun shown(v:Double)=if(selectedMetric=="金額") money.format(v/1000) else DecimalFormat("#,##0.0").format(v/1000)
+    private fun percent(a:Double,t:Double)=if(t>0) "${DecimalFormat("0.0").format(a/t*100)}%" else "—"
+    private fun monthTotal(table:String,no:String,months:List<String>,metric:String,cat:String):Double {
+        val field=if(table=="sd_target") "value" else if(metric=="金額") "amount" else "sqm"
+        val where=StringBuilder("customer_no=? AND month IN (${months.joinToString { "?" }})")
+        val args=mutableListOf(no).apply{addAll(months)}
+        if(cat!="合計"){where.append(" AND category=?");args.add(cat)}
+        if(table=="sd_target"){where.append(" AND metric=?");args.add(if(metric=="金額")"金額" else "平米")}
+        var value=0.0;db.rawQuery("SELECT SUM($field) FROM $table WHERE $where",args.toTypedArray()).use{if(it.moveToFirst())value=it.getDouble(0)};return value
+    }
+    private fun oneValue(table:String,no:String,month:String,metric:String,cat:String):Double {
+        val field=if(table=="sd_target") "value" else if(metric=="金額") "amount" else "sqm"
+        val where=StringBuilder("customer_no=? AND month=?");val args=mutableListOf(no,month)
+        if(cat!="合計"){where.append(" AND category=?");args.add(cat)}
+        if(table=="sd_target"){where.append(" AND metric=?");args.add(if(metric=="金額")"金額" else "平米")}
+        var value=0.0;db.rawQuery("SELECT SUM($field) FROM $table WHERE $where",args.toTypedArray()).use{if(it.moveToFirst())value=it.getDouble(0)};return value
+    }
+
     private fun actuals(cat:String, months:List<String>, customer:String):Pair<Double,Double>{var amount=0.0;var sqm=0.0;db.rawQuery("SELECT SUM(amount),SUM(sqm) FROM sd_actual WHERE category=? AND customer_no=? AND month IN (${months.joinToString{ "?" }})",(listOf(cat,customer)+months).toTypedArray()).use{if(it.moveToFirst()){amount=it.getDouble(0);sqm=it.getDouble(1)}};return amount to sqm}
     private fun sum(table:String,where:String,args:List<String>):Double{var x=0.0;db.rawQuery("SELECT SUM(value) FROM $table WHERE $where",args.toTypedArray()).use{if(it.moveToFirst())x=it.getDouble(0)};return x}
     private fun months(): List<String> =(4..15).map{m->val year=2026+(m-1)/12;val month=(m-1)%12+1;"%04d-%02d".format(year,month)}
@@ -195,7 +288,7 @@ class SalesDashboardActivity : Activity() {
     private fun margin()=LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=12}
     private fun label(s:String,size:Float,color:Int,bold:Boolean)=TextView(this).apply{text=s;textSize=size;setTextColor(color);if(bold)setTypeface(null,Typeface.BOLD)}
     private fun section(s:String)=label(s,16f,Color.rgb(15,23,42),true).apply{setPadding(4,8,4,12)}
-    private fun button(s:String,primary:Boolean)=TextView(this).apply{text=s;textSize=14f;gravity=Gravity.CENTER;setTextColor(if(primary)Color.WHITE else Color.rgb(15,91,70));setPadding(10,12,10,12);background=android.graphics.drawable.GradientDrawable().apply{setColor(if(primary)Color.rgb(15,91,70) else Color.rgb(235,245,240));cornerRadius=12f};layoutParams=LinearLayout.LayoutParams(-1,-2).apply{topMargin=6}}
+    private fun button(s:String,primary:Boolean)=TextView(this).apply{text=s;textSize=14f;gravity=Gravity.CENTER;setTextColor(if(primary)Color.WHITE else Color.rgb(15,91,70));setPadding(10,12,10,12);background=android.graphics.drawable.GradientDrawable().apply{setColor(if(primary)Color.rgb(48,85,220) else Color.rgb(235,245,240));cornerRadius=12f};layoutParams=LinearLayout.LayoutParams(-1,-2).apply{topMargin=6}}
 
     private object OpenXml {
         fun read(input:java.io.InputStream):List<Pair<String,List<List<String>>>> {
