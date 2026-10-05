@@ -26,8 +26,9 @@ if "販売目標・受注" not in s:
 manifest = Path("ledgerapp/app/src/main/AndroidManifest.xml")
 m = manifest.read_text()
 if 'android:name=".SalesDashboardActivity"' not in m:
-    anchor = '        <activity android:name=".MainActivity"'
-    if anchor not in m:
+    anchors = ['        <activity android:name=".MainActivity"', '        <activity\n            android:name=".MainActivity"']
+    anchor = next((item for item in anchors if item in m), None)
+    if anchor is None:
         raise SystemExit("MainActivity manifest entry not found")
     m = m.replace(anchor, '        <activity android:name=".SalesDashboardActivity" android:screenOrientation="unspecified" android:exported="false" />\n' + anchor, 1)
     manifest.write_text(m)
