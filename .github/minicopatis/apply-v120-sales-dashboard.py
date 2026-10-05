@@ -125,6 +125,17 @@ home_method = r'''    private fun showHome() {
 s, count = re.subn(r"    private fun showHome\(\) \{.*?\n    private fun showLedger\(\) \{", home_method + "\n    private fun showLedger() {", s, count=1, flags=re.S)
 if count != 1:
     raise SystemExit("could not replace showHome")
+if "private fun openQuickQuote()" not in s:
+    quote_method = '''    private fun openQuickQuote() {
+        try {
+            startActivity(Intent().setClassName(packageName, "jp.co.kobayashi.cardboardquote.MainActivity"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "簡易見積を開けませんでした", Toast.LENGTH_LONG).show()
+        }
+    }
+
+'''
+    s = s.replace("    private fun showLedger() {", quote_method + "    private fun showLedger() {", 1)
 if "private const val REQ_HOME_IMPORT" not in s:
     s = s.replace("        private const val REQ_SALES_CSV = 4002", "        private const val REQ_SALES_CSV = 4002\n        private const val REQ_HOME_IMPORT = 4003", 1)
 main.write_text(s)
