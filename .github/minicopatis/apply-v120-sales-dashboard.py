@@ -22,14 +22,23 @@ if "販売目標を開く" not in s:
         orderCard.addView(actionButton("受注情報を開く", true).apply { setOnClickListener { startActivity(Intent(this@MainActivity, SalesDashboardActivity::class.java).putExtra("orders_only", true)) } }, fullWidth(dp(48)))
         root.addView(orderCard, fullWidthWrap().apply { bottomMargin = dp(16) })
 
-        val quickQuoteCard = card()
-        quickQuoteCard.addView(text("簡易見積", 19f, Color.rgb(15, 23, 42), Typeface.BOLD).apply { setPadding(0, 0, 0, dp(12)) })
-        quickQuoteCard.addView(actionButton("簡易見積を開く", true).apply { setOnClickListener { openQuickQuote() } }, fullWidth(dp(52)))
-        root.addView(quickQuoteCard, fullWidthWrap())'''
+        '''
     s = s.replace(marker, marker + extra, 1)
-    # Rebuild the quote card explicitly; this removes the blank card left by older patches.
-    s, n = re.subn(r'\n\s*val quoteCard = card\(\).*?root\.addView\(quoteCard, fullWidthWrap\(\)\)', '', s, count=1, flags=re.S)
     main.write_text(s)
+
+# Restore the quick quote card at its original home position with a visible action.
+quote_card = '''        val quoteCard = card()
+        quoteCard.addView(text("簡易見積", 19f, Color.rgb(15, 23, 42), Typeface.BOLD).apply {
+            setPadding(0, 0, 0, dp(16))
+        })
+        quoteCard.addView(actionButton("簡易見積を開く", true).apply {
+            setOnClickListener { openQuickQuote() }
+        }, fullWidth(dp(52)))
+        root.addView(quoteCard, fullWidthWrap())'''
+s, quote_count = re.subn(r'        val quoteCard = card\(\).*?root\.addView\(quoteCard, fullWidthWrap\(\)\)', lambda _: quote_card, s, count=1, flags=re.S)
+if quote_count != 1:
+    raise SystemExit("quote card block not found")
+main.write_text(s)
 
 manifest = Path("ledgerapp/app/src/main/AndroidManifest.xml")
 m = manifest.read_text()
@@ -63,7 +72,7 @@ for activity_name in ('.MainActivity', '.SalesDashboardActivity'):
 manifest.write_text(m)
 
 build = Path("ledgerapp/app/build.gradle")
-b = build.read_text().replace("versionCode 21", "versionCode 22").replace("versionName '1.3.1'", "versionName '1.3.2'")
+b = build.read_text().replace("versionCode 22", "versionCode 23").replace("versionName '1.3.2'", "versionName '1.3.3'")
 build.write_text(b)
 
 activity = Path(".github/minicopatis/SalesDashboardActivity.kt")
