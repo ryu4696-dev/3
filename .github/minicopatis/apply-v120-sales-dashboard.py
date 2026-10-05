@@ -26,18 +26,21 @@ if "販売目標を開く" not in s:
     s = s.replace(marker, marker + extra, 1)
     main.write_text(s)
 
-# Restore the quick quote card at its original home position with a visible action.
-quote_card = '''        val quoteCard = card()
-        quoteCard.addView(text("簡易見積", 19f, Color.rgb(15, 23, 42), Typeface.BOLD).apply {
-            setPadding(0, 0, 0, dp(16))
-        })
-        quoteCard.addView(actionButton("簡易見積を開く", true).apply {
-            setOnClickListener { openQuickQuote() }
-        }, fullWidth(dp(52)))
-        root.addView(quoteCard, fullWidthWrap())'''
-s, quote_count = re.subn(r'        val quoteCard = card\(\).*?root\.addView\(quoteCard, fullWidthWrap\(\)\)', lambda _: quote_card, s, count=1, flags=re.S)
+# Put quick quote first on the home screen so it cannot be pushed below the fold.
+home_anchor = '        root.setPadding(dp(20), dp(22), dp(20), dp(24))'
+if home_anchor not in s:
+    raise SystemExit("home content anchor not found")
+if "val homeQuoteCard = card()" not in s:
+    home_quote = '''
+
+        val homeQuoteCard = card()
+        homeQuoteCard.addView(text("簡易見積", 19f, Color.rgb(15, 23, 42), Typeface.BOLD).apply { setPadding(0, 0, 0, dp(12)) })
+        homeQuoteCard.addView(actionButton("簡易見積を開く", true).apply { setOnClickListener { openQuickQuote() } }, fullWidth(dp(52)))
+        root.addView(homeQuoteCard, fullWidthWrap().apply { bottomMargin = dp(16) })'''
+    s = s.replace(home_anchor, home_anchor + home_quote, 1)
+s, quote_count = re.subn(r'\n\s*val quoteCard = card\(\).*?root\.addView\(quoteCard, fullWidthWrap\(\)\)', '', s, count=1, flags=re.S)
 if quote_count != 1:
-    raise SystemExit("quote card block not found")
+    raise SystemExit("old quick quote card block not found")
 main.write_text(s)
 
 manifest = Path("ledgerapp/app/src/main/AndroidManifest.xml")
@@ -72,7 +75,11 @@ for activity_name in ('.MainActivity', '.SalesDashboardActivity'):
 manifest.write_text(m)
 
 build = Path("ledgerapp/app/build.gradle")
-b = build.read_text().replace("versionCode 22", "versionCode 23").replace("versionName '1.3.2'", "versionName '1.3.3'")
+b = build.read_text()
+b, code_count = re.subn(r"versionCode\s+\d+", "versionCode 24", b, count=1)
+b, name_count = re.subn(r"versionName\s+'[^']+'", "versionName '1.3.4'", b, count=1)
+if code_count != 1 or name_count != 1:
+    raise SystemExit("app version declarations not found")
 build.write_text(b)
 
 activity = Path(".github/minicopatis/SalesDashboardActivity.kt")
