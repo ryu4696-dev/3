@@ -126,25 +126,41 @@ class SalesDashboardActivity : Activity() {
             val open = expandedCustomer == no
             val item = card().apply { setOnClickListener { expandedCustomer = if (open) "" else no; render() } }
             val head = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-            head.addView(label(if (no == "全体") "全社" else "${name}社", 17f, Color.rgb(15, 23, 42), true), LinearLayout.LayoutParams(0, -2, 1f))
+            head.addView(label(if (no == "全体") "全社" else name, 17f, Color.rgb(15, 23, 42), true), LinearLayout.LayoutParams(0, -2, 1f))
             head.addView(label("${shown(actual)} / ${if (target > 0) shown(target) else "—"} $unitLabel", 12f, Color.rgb(47, 58, 81), true))
             head.addView(label(if (open) "　⌃" else "　⌄", 18f, Color.GRAY, true))
             item.addView(head)
             item.addView(label("目標 ${if (target > 0) shown(target) else "—"}　実績 ${shown(actual)}　達成率 ${percent(actual, target)}", 12f, Color.GRAY, false).apply { setPadding(0, 6, 0, 0) })
             if (open) {
                 item.addView(TextView(this).apply { setBackgroundColor(Color.rgb(229, 233, 241)); layoutParams = LinearLayout.LayoutParams(-1, 1).apply { topMargin = 10; bottomMargin = 6 } })
-                val heading = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(2, 4, 2, 6) }
-                listOf("月", "目標", "実績", "達成率").forEach { heading.addView(label(it, 10.5f, Color.GRAY, true), LinearLayout.LayoutParams(0, -2, 1f).apply { if (it != "月") gravity = Gravity.END }) }
-                item.addView(heading)
-                months.forEachIndexed { index, month ->
-                    val t = oneValue("sd_target", no, month, selectedMetric, selectedCategory)
-                    val a = oneValue("sd_actual", no, month, selectedMetric, selectedCategory)
-                    val line = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(2, 7, 2, 7); if (index % 2 == 0) setBackgroundColor(Color.rgb(247, 248, 252)) }
-                    line.addView(label(month.substring(5).toInt().toString() + "月", 11f, Color.DKGRAY, false), LinearLayout.LayoutParams(0, -2, 1f))
-                    line.addView(label(if (t > 0) shown(t) else "—", 11f, Color.DKGRAY, false), LinearLayout.LayoutParams(0, -2, 1f).apply { gravity = Gravity.END })
-                    line.addView(label(shown(a), 11f, Color.DKGRAY, true), LinearLayout.LayoutParams(0, -2, 1f).apply { gravity = Gravity.END })
-                    line.addView(label(percent(a, t), 11f, if (t > 0 && a >= t) Color.rgb(20, 125, 79) else Color.rgb(175, 113, 25), true), LinearLayout.LayoutParams(0, -2, 1f).apply { gravity = Gravity.END })
-                    item.addView(line)
+                listOf(months.take(6), months.drop(6)).forEachIndexed { halfIndex, halfMonths ->
+                    val halfLabel=if(halfIndex==0) "4月〜9月　上期" else "10月〜3月　下期"
+                    item.addView(label(halfLabel,12f,Color.rgb(70,78,98),true).apply { setPadding(0,dp(7),0,dp(3)) })
+                    val grid=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+                    val heading=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL }
+                    fun addCell(row:LinearLayout,value:String,first:Boolean=false,bold:Boolean=false,color:Int=Color.DKGRAY) {
+                        val cell=label(value,9.5f,color,bold).apply { gravity=Gravity.CENTER;setPadding(dp(1),dp(5),dp(1),dp(5)) }
+                        row.addView(cell,LinearLayout.LayoutParams(dp(if(first)42 else 46),-2))
+                    }
+                    addCell(heading,"",first=true)
+                    halfMonths.forEach { addCell(heading,it.substring(5).toInt().toString()+"月",bold=true,color=Color.GRAY) }
+                    addCell(heading,if(halfIndex==0)"上期計" else "下期計",bold=true,color=Color.rgb(52,81,200))
+                    grid.addView(heading)
+                    val targetValues=halfMonths.map { oneValue("sd_target",no,it,selectedMetric,selectedCategory) }
+                    val actualValues=halfMonths.map { oneValue("sd_actual",no,it,selectedMetric,selectedCategory) }
+                    val targetHalf=targetValues.sum();val actualHalf=actualValues.sum()
+                    fun addDataRow(title:String,values:List<String>,total:String,index:Int,color:Int=Color.DKGRAY) {
+                        val row=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL;if(index%2==0)setBackgroundColor(Color.rgb(247,248,252)) }
+                        addCell(row,title,first=true,bold=true,color=Color.GRAY)
+                        values.forEach { addCell(row,it,color=color) }
+                        addCell(row,total,bold=true,color=Color.rgb(52,81,200))
+                        grid.addView(row)
+                    }
+                    addDataRow("目標",targetValues.map{if(it>0)shown(it) else "—"},if(targetHalf>0)shown(targetHalf) else "—",0)
+                    addDataRow("実績",actualValues.map{shown(it)},shown(actualHalf),1)
+                    addDataRow("達成率",actualValues.indices.map{percent(actualValues[it],targetValues[it])},percent(actualHalf,targetHalf),2,Color.rgb(175,113,25))
+                    val horizontal=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false;addView(grid) }
+                    item.addView(horizontal,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(4) })
                 }
             }
             body.addView(item, margin())
@@ -206,9 +222,9 @@ class SalesDashboardActivity : Activity() {
     }
 
     private fun choose(code:Int,mime:String) { val i=Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type="*/*"; putExtra(Intent.EXTRA_MIME_TYPES,arrayOf(mime,"application/vnd.ms-excel","application/vnd.ms-excel.sheet.macroEnabled.12","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","application/zip","application/octet-stream","text/csv")) }; startActivityForResult(i,code) }
-    @Deprecated("Deprecated") override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) { super.onActivityResult(requestCode,resultCode,data); if(resultCode!=RESULT_OK)return; val uri=data?.data?:return; thread { try { when(requestCode){11->importTargets(uri);12->importSales(uri);13->importOrders(uri)}; runOnUiThread { Toast.makeText(this,"読み込みました",Toast.LENGTH_LONG).show(); render() } } catch(e:Exception) { runOnUiThread { Toast.makeText(this,e.message?:"読み込みに失敗しました",Toast.LENGTH_LONG).show() } } } }
+    @Deprecated("Deprecated") override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) { super.onActivityResult(requestCode,resultCode,data); if(resultCode!=RESULT_OK)return; val uri=data?.data?:return; thread { try { val message=when(requestCode){11->"販売目標を読み込みました（${importTargets(uri)}件）";12->{importSales(uri);"売上実績を読み込みました"};13->{importOrders(uri);"受注明細を読み込みました"};else->"読み込みました"}; runOnUiThread { Toast.makeText(this,message,Toast.LENGTH_LONG).show(); render() } } catch(e:Exception) { android.util.Log.e("SalesDashboard","Excel/CSV import failed",e);runOnUiThread { Toast.makeText(this,e.message?:"読み込みに失敗しました",Toast.LENGTH_LONG).show() } } } }
 
-    private fun importTargets(uri:Uri) {
+    private fun importTargets(uri:Uri):Int {
         val book=OpenXml.read(contentResolver.openInputStream(uri)!!)
         val db=db; var imported=0; db.beginTransaction(); try { db.delete("sd_target",null,null)
             book.forEach { (_,rows) ->
@@ -235,6 +251,7 @@ class SalesDashboardActivity : Activity() {
             if(imported==0)error("今期目標のデータが見つかりません。販売目標表（.xlsm）を選択してください")
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
+        return imported
     }
 
     private fun importSales(uri:Uri) {
@@ -270,6 +287,7 @@ class SalesDashboardActivity : Activity() {
         val db=db;db.beginTransaction();try{db.delete("sd_order",null,null);all.forEach{r->db.insert("sd_order",null,ContentValues().apply{put("category",r[0]);put("delivery",r[1]);put("customer",r[2]);put("item",r[3]);put("qty",r[4]);put("amount",r[5].toDoubleOrNull()?:0.0);put("sqm",r[6].toDoubleOrNull()?:0.0);put("sales",r[7]);put("receiver",r[8])})};db.setTransactionSuccessful()}finally{db.endTransaction()}
     }
 
+    private fun dp(value:Int)=(value*resources.displayMetrics.density+0.5f).toInt()
     private fun rounded(color:Int)=android.graphics.drawable.GradientDrawable().apply{setColor(color);cornerRadius=16f}
     private val unitLabel get() = if(selectedMetric=="金額") "千円" else "千㎡"
     private fun shown(v:Double)=if(selectedMetric=="金額") money.format(v/1000) else DecimalFormat("#,##0.0").format(v/1000)
