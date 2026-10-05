@@ -9,7 +9,7 @@ on:
       - '.github/minicopatis/**'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: build-minicopatis-${{ github.ref }}
@@ -296,3 +296,14 @@ jobs:
           name: MiniCoPaTis-v1.3.0
           path: MiniCoPaTis-v1.3.0.apk
           retention-days: 30
+
+      - name: Record APK build run ID
+        if: always()
+        run: |
+          echo "$GITHUB_RUN_ID" > .minicopatis-latest-run-id
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .minicopatis-latest-run-id
+          git commit -m "Record MiniCoPaTis build run"
+          git push origin HEAD:main
+
