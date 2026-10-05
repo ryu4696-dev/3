@@ -92,13 +92,9 @@ home_method = r'''    private fun showHome() {
         )
 
         dataPage.addView(text("データを読み込む", 18f, Color.rgb(15, 23, 42), Typeface.BOLD))
-        dataPage.addView(text("売上分析CSVは販売目標の実績にも反映します。", 12f, Color.rgb(100, 116, 139), Typeface.NORMAL).apply {
-            setPadding(0, dp(4), 0, dp(10))
-        })
         fun importButton(title: String, note: String, click: () -> Unit) {
             val box = card().apply { setPadding(dp(13), dp(10), dp(13), dp(10)) }
             box.addView(text(title, 14f, Color.rgb(15, 23, 42), Typeface.BOLD))
-            box.addView(text(note, 11f, Color.rgb(100, 116, 139), Typeface.NORMAL).apply { setPadding(0, dp(2), 0, dp(6)) })
             box.addView(actionButton("読み込む", false).apply { setOnClickListener { click() } }, fullWidth(dp(42)))
             dataPage.addView(box, fullWidthWrap().apply { bottomMargin = dp(8) })
         }
@@ -112,8 +108,6 @@ home_method = r'''    private fun showHome() {
             startActivityForResult(Intent(this, SalesDashboardActivity::class.java)
                 .putExtra("import_only", true).putExtra("import_type", "orders"), REQ_HOME_IMPORT)
         })
-        val lastSales = prefs.getString("sales_last_import", null)
-        if (!lastSales.isNullOrBlank()) dataPage.addView(text("売上分析CSV：$lastSales", 10.5f, Color.rgb(148, 163, 184), Typeface.NORMAL).apply { setPadding(dp(3), 0, 0, dp(8)) })
 
         val host = FrameLayout(this)
         host.addView(homePage, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -268,8 +262,8 @@ elif "CREATE TABLE IF NOT EXISTS sd_actual" not in r:
 # Bump version and copy the dashboard source into the generated Android project.
 build = Path("ledgerapp/app/build.gradle")
 b = build.read_text()
-b, code_count = re.subn(r"versionCode\s+\d+", "versionCode 27", b, count=1)
-b, name_count = re.subn(r"versionName\s+'[^']+'", "versionName '1.3.7'", b, count=1)
+b, code_count = re.subn(r"versionCode\s+\d+", "versionCode 28", b, count=1)
+b, name_count = re.subn(r"versionName\s+'[^']+'", "versionName '1.3.8'", b, count=1)
 if code_count != 1 or name_count != 1:
     raise SystemExit("app version declarations not found")
 build.write_text(b)
