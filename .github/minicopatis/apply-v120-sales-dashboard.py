@@ -76,8 +76,8 @@ manifest.write_text(m)
 
 build = Path("ledgerapp/app/build.gradle")
 b = build.read_text()
-b, code_count = re.subn(r"versionCode\s+\d+", "versionCode 24", b, count=1)
-b, name_count = re.subn(r"versionName\s+'[^']+'", "versionName '1.3.4'", b, count=1)
+b, code_count = re.subn(r"versionCode\s+\d+", "versionCode 25", b, count=1)
+b, name_count = re.subn(r"versionName\s+'[^']+'", "versionName '1.3.5'", b, count=1)
 if code_count != 1 or name_count != 1:
     raise SystemExit("app version declarations not found")
 build.write_text(b)
