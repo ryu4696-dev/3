@@ -166,13 +166,13 @@ old = '''                    background=android.graphics.drawable.GradientDrawab
                         cornerRadius=16f
                         setStroke(dp(1), Color.rgb(226,229,234))
                     }
-                    addView(label("$date　${companies.size}社・$dayCount件",15f,Color.rgb(55,65,81),true))'''
+                    addView(label("$date　${companies.size}社・${dayCount}件",15f,Color.rgb(55,65,81),true))'''
 new = '''                    background=android.graphics.drawable.GradientDrawable().apply {
                         setColor(Color.rgb(237,243,251))
                         cornerRadius=16f
                         setStroke(dp(1), Color.rgb(211,224,241))
                     }
-                    addView(label("$date　${companies.size}社・$dayCount件",15f,Color.rgb(42,67,108),true))'''
+                    addView(label("$date　${companies.size}社・${dayCount}件",15f,Color.rgb(42,67,108),true))'''
 if old not in s:
     raise SystemExit("order date header anchor missing")
 s = s.replace(old, new, 1)
