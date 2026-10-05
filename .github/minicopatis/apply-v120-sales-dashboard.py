@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 base = Path("ledgerapp/app/src/main/java/jp/co/ichika/salesledger")
 main = base / "MainActivity.kt"
@@ -19,8 +20,15 @@ if "販売目標を開く" not in s:
         orderCard.addView(text("受注情報", 19f, Color.rgb(15, 23, 42), Typeface.BOLD).apply { setPadding(0, 0, 0, dp(12)) })
         orderCard.addView(text("段ボール・商品の受注明細", 12.5f, Color.rgb(100, 116, 139), Typeface.NORMAL).apply { setPadding(0, 0, 0, dp(12)) })
         orderCard.addView(actionButton("受注情報を開く", true).apply { setOnClickListener { startActivity(Intent(this@MainActivity, SalesDashboardActivity::class.java).putExtra("orders_only", true)) } }, fullWidth(dp(48)))
-        root.addView(orderCard, fullWidthWrap().apply { bottomMargin = dp(16) })'''
+        root.addView(orderCard, fullWidthWrap().apply { bottomMargin = dp(16) })
+
+        val quickQuoteCard = card()
+        quickQuoteCard.addView(text("簡易見積", 19f, Color.rgb(15, 23, 42), Typeface.BOLD).apply { setPadding(0, 0, 0, dp(12)) })
+        quickQuoteCard.addView(actionButton("簡易見積を開く", true).apply { setOnClickListener { openQuickQuote() } }, fullWidth(dp(52)))
+        root.addView(quickQuoteCard, fullWidthWrap())'''
     s = s.replace(marker, marker + extra, 1)
+    # Rebuild the quote card explicitly; this removes the blank card left by older patches.
+    s, n = re.subn(r'\n\s*val quoteCard = card\(\).*?root\.addView\(quoteCard, fullWidthWrap\(\)\)', '', s, count=1, flags=re.S)
     main.write_text(s)
 
 manifest = Path("ledgerapp/app/src/main/AndroidManifest.xml")
@@ -31,10 +39,20 @@ if 'android:name=".SalesDashboardActivity"' not in m:
     if anchor is None:
         raise SystemExit("MainActivity manifest entry not found")
     m = m.replace(anchor, '        <activity android:name=".SalesDashboardActivity" android:screenOrientation="unspecified" android:exported="false" />\n' + anchor, 1)
-    manifest.write_text(m)
+
+# Android 15 draws edge-to-edge by default. Keep app content below status/navigation bars.
+for activity_name in ('.MainActivity', '.SalesDashboardActivity'):
+    m = re.sub(
+        r'<activity(?P<attrs>[^>]*android:name="' + re.escape(activity_name) + r'"[^>]*)>',
+        lambda match: '<activity' + match.group('attrs') + (' android:theme="@style/QuoteCompatTheme"' if 'android:theme=' not in match.group('attrs') else '') + '>',
+        m,
+        count=1,
+        flags=re.S,
+    )
+manifest.write_text(m)
 
 build = Path("ledgerapp/app/build.gradle")
-b = build.read_text().replace("versionCode 19", "versionCode 21").replace("versionName '0.6.3'", "versionName '1.3.1'")
+b = build.read_text().replace("versionCode 21", "versionCode 22").replace("versionName '1.3.1'", "versionName '1.3.2'")
 build.write_text(b)
 
 activity = Path(".github/minicopatis/SalesDashboardActivity.kt")
