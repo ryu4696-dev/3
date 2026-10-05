@@ -89,7 +89,7 @@ class SalesDashboardActivity : Activity() {
 
         val unitRail = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf("金額", "平米").forEach { item ->
-            unitRail.addView(button(item, item == selectedMetric).apply { setOnClickListener { selectedMetric = item; render() } }, LinearLayout.LayoutParams(0, 44, 1f).apply { leftMargin = 4; rightMargin = 4 })
+            unitRail.addView(button(item, item == selectedMetric).apply { setOnClickListener { selectedMetric = item; render() } }, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = 4; rightMargin = 4 })
         }
         val unitCard = card().apply { addView(unitRail) }
         body.addView(unitCard, margin())
@@ -187,17 +187,18 @@ class SalesDashboardActivity : Activity() {
         val db=db; db.beginTransaction(); try { db.delete("sd_target",null,null)
             book.forEach { (_,rows) ->
                 if(rows.size<6)return@forEach
-                val id=rows.getOrNull(1)?.getOrNull(1).orEmpty().trim(); val name=rows.getOrNull(1)?.getOrNull(2).orEmpty().trim()
+                val id=rows.getOrNull(2)?.getOrNull(1).orEmpty().trim(); val name=rows.getOrNull(2)?.getOrNull(2).orEmpty().trim()
                 val customer=if(id.isBlank()||id=="全体") "全体" else normalizeNo(id); val customerName=if(customer=="全体")"全体" else name
                 var category=""
                 for(r in 2 until rows.size) {
                     val row=rows[r]; val a=row.getOrNull(0).orEmpty().trim(); val b=row.getOrNull(1).orEmpty().trim()
-                    if(a in listOf("段ボール","商品","版代型代","運賃","その他")) category=a
-                    if(b!="今期目標"||category.isBlank()) continue
-                    val metric=when(a){"（千㎡）","(千㎡)"->"平米";"（千円）","(千円)"->"金額";else->""}
+                    val baseCategory=listOf("段ボール","商品","版代型代","運賃","その他").firstOrNull { a.startsWith(it) }
+                    if(baseCategory!=null) category=baseCategory
+                    if(!b.startsWith("今期目標")||category.isBlank()) continue
+                    val metric=when { a.startsWith("（千㎡")||a.startsWith("(千㎡")->"平米";a.startsWith("（千円")||a.startsWith("(千円")->"金額";else->"" }
                     if(metric.isBlank()) continue
                     val prior=rows.getOrNull(r-1)?.getOrNull(0).orEmpty().trim()
-                    if((metric=="平米"&&prior!="売上平米")||(metric=="金額"&&prior!="売上金額")) continue
+                    if((metric=="平米"&&!prior.startsWith("売上平米"))||(metric=="金額"&&!prior.startsWith("売上金額"))) continue
                     listOf(2,3,4,5,6,7,9,10,11,12,13,14).forEachIndexed { mi, col ->
                         val value=row.getOrNull(col)?.toDoubleOrNull()?:0.0
                         val month=months()[mi]
@@ -231,9 +232,10 @@ class SalesDashboardActivity : Activity() {
             var header=-1; var map=emptyMap<String,Int>()
             rows.forEachIndexed { i,r->if(header<0&&r.any{it.contains("納期")}&&r.any{it.contains("請求先名")}&&r.any{it.contains("品名")}){header=i;map=r.mapIndexedNotNull{j,v->v.trim().takeIf{it.isNotBlank()}?.let{it to j}}.toMap()} }
             if(header<0)return@forEach
+            fun col(vararg keys:String):Int=keys.firstNotNullOfOrNull { key -> map.entries.firstOrNull { it.key.startsWith(key) }?.value } ?: -1
             val category=if(sheet.contains("商品"))"商品" else "段ボール"
-            for(i in header+1 until rows.size){val r=rows[i];val item=r.getOrNull(map["品名"]?:-1).orEmpty().trim();if(item.isBlank())continue
-                fun v(vararg keys:String)=keys.firstNotNullOfOrNull{r.getOrNull(map[it]?:-1)?.takeIf{it.isNotBlank()}}.orEmpty()
+            for(i in header+1 until rows.size){val r=rows[i];val item=r.getOrNull(col("品名")).orEmpty().trim();if(item.isBlank())continue
+                fun v(vararg keys:String)=keys.firstNotNullOfOrNull{key->r.getOrNull(col(key))?.takeIf{it.isNotBlank()}}.orEmpty()
                 all+=arrayOf(category,displayDate(v("納期")),v("請求先名","商品得意先名"),item,v("受注数"),v("受注金額").replace(",",""),v("平米").replace(",",""),v("営業"),v("受担"))
             }
         }
@@ -271,7 +273,7 @@ class SalesDashboardActivity : Activity() {
     private fun margin()=LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=12}
     private fun label(s:String,size:Float,color:Int,bold:Boolean)=TextView(this).apply{text=s;textSize=size;setTextColor(color);if(bold)setTypeface(null,Typeface.BOLD)}
     private fun section(s:String)=label(s,16f,Color.rgb(15,23,42),true).apply{setPadding(4,8,4,12)}
-    private fun button(s:String,primary:Boolean)=TextView(this).apply{text=s;textSize=14f;gravity=Gravity.CENTER;setTextColor(if(primary)Color.WHITE else Color.rgb(15,91,70));setPadding(10,12,10,12);background=android.graphics.drawable.GradientDrawable().apply{setColor(if(primary)Color.rgb(48,85,220) else Color.rgb(235,245,240));cornerRadius=12f};layoutParams=LinearLayout.LayoutParams(-1,-2).apply{topMargin=6}}
+    private fun button(s:String,primary:Boolean)=TextView(this).apply{text=s;textSize=14f;gravity=Gravity.CENTER;setTextColor(if(primary)Color.WHITE else Color.rgb(15,91,70));setPadding(10,5,10,5);minHeight=(44*resources.displayMetrics.density).toInt();background=android.graphics.drawable.GradientDrawable().apply{setColor(if(primary)Color.rgb(48,85,220) else Color.rgb(235,245,240));cornerRadius=12f};layoutParams=LinearLayout.LayoutParams(-1,-2).apply{topMargin=6}}
 
     private object OpenXml {
         fun read(input:java.io.InputStream):List<Pair<String,List<List<String>>>> {
