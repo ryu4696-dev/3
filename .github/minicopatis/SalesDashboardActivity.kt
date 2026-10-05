@@ -25,6 +25,7 @@ import java.util.zip.ZipInputStream
 import kotlin.concurrent.thread
 
 class SalesDashboardActivity : Activity() {
+    private data class OrderLine(val item:String,val qty:String,val amount:Double,val sqm:Double,val sales:String,val receiver:String)
     private val db by lazy { DataRepository(this).writableDatabase }
     private val money = DecimalFormat("#,##0")
     private var filter = ""
@@ -33,6 +34,7 @@ class SalesDashboardActivity : Activity() {
     private var selectedMetric = "金額"
     private var expandedCustomer = "全体"
     private var lastScrollY = 0
+    private val expandedOrderGroups = mutableSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -152,6 +154,7 @@ class SalesDashboardActivity : Activity() {
     private fun renderOrders(body: LinearLayout) {
         val bar=card()
         bar.addView(label("受注明細",18f,Color.rgb(15,23,42),true))
+        bar.addView(label("納期ごと・得意先ごとにまとめています。行をタップすると明細が開きます。",12f,Color.GRAY,false).apply { setPadding(0,4,0,6) })
         bar.addView(button("受注明細表（Excel）を読み込む",false).apply { setOnClickListener { choose(13,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") } })
         val search=EditText(this).apply { hint="得意先・品名で検索"; isSingleLine=true; setText(filter); addTextChangedListener(object: android.text.TextWatcher { override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}; override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){filter=s?.toString().orEmpty(); showOrderRows()}; override fun afterTextChanged(s:android.text.Editable?){} }) }
         bar.addView(search)
@@ -164,27 +167,50 @@ class SalesDashboardActivity : Activity() {
     private fun showOrderRows() {
         val box=orderContainer ?: return
         box.removeAllViews()
-        val query="SELECT category,delivery,customer,item,qty,amount,sqm,sales,receiver FROM sd_order WHERE customer LIKE ? OR item LIKE ? ORDER BY delivery DESC LIMIT 250"
+        val query="SELECT category,delivery,customer,item,qty,amount,sqm,sales,receiver FROM sd_order WHERE customer LIKE ? OR item LIKE ? ORDER BY delivery DESC,customer COLLATE NOCASE,item COLLATE NOCASE LIMIT 250"
         db.rawQuery(query,arrayOf("%$filter%","%$filter%")).use { c ->
             if(c.count==0){box.addView(card().apply { addView(label("受注データがありません。Excelを読み込んでください。",14f,Color.DKGRAY,false)) }); return}
+            val days=linkedMapOf<String,LinkedHashMap<String,MutableList<Pair<String,OrderLine>>>>()
             while(c.moveToNext()) {
-                val v=card(); v.addView(label("${c.getString(1)}　${c.getString(0)}",12f,Color.GRAY,true))
-                v.addView(label(c.getString(2),17f,Color.rgb(15,23,42),true).apply { setPadding(0,4,0,2) })
-                v.addView(label(c.getString(3),14f,Color.DKGRAY,false))
-                v.addView(label("数量 ${c.getString(4)}　金額 ${money.format(c.getDouble(5)/1000)} 千円　平米 ${money.format(c.getDouble(6)/1000)} 千㎡",12f,Color.DKGRAY,false).apply { setPadding(0,5,0,0) })
-                val reps=listOf(c.getString(7),c.getString(8)).filter { !it.isNullOrBlank() }.joinToString(" / ")
-                if(reps.isNotBlank()) v.addView(label("担当 $reps",11f,Color.GRAY,false))
-                box.addView(v,margin())
+                val date=c.getString(1).orEmpty().ifBlank { "納期未登録" }
+                val company=c.getString(2).orEmpty().ifBlank { "得意先名未登録" }
+                val line=OrderLine(c.getString(3).orEmpty(),c.getString(4).orEmpty(),c.getDouble(5),c.getDouble(6),c.getString(7).orEmpty(),c.getString(8).orEmpty())
+                days.getOrPut(date){linkedMapOf()}.getOrPut(company){mutableListOf()} += c.getString(0).orEmpty() to line
+            }
+            days.forEach { (date,companies) ->
+                val dayCount=companies.values.sumOf { it.size }
+                box.addView(card().apply {
+                    background=rounded(Color.rgb(230,238,250))
+                    addView(label("$date　${companies.size}社・${dayCount}件",15f,Color.rgb(35,58,115),true))
+                },margin())
+                companies.forEach { (company,rows) ->
+                    val key="$date|$company";val open=key in expandedOrderGroups
+                    val amount=rows.sumOf { it.second.amount };val sqm=rows.sumOf { it.second.sqm }
+                    val group=card().apply { setOnClickListener { if(open) expandedOrderGroups.remove(key) else expandedOrderGroups.add(key);showOrderRows() } }
+                    val heading=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL }
+                    heading.addView(label(company,15f,Color.rgb(15,23,42),true),LinearLayout.LayoutParams(0,-2,1f))
+                    heading.addView(label("${rows.size}件　${money.format(amount/1000)}千円　${money.format(sqm/1000)}千㎡　${if(open)"⌃" else "⌄"}",11f,Color.GRAY,true))
+                    group.addView(heading)
+                    if(open) rows.forEach { (category,line) ->
+                        val detail=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(0,10,0,8) }
+                        detail.addView(label("$category　${line.item}",13f,Color.DKGRAY,true))
+                        detail.addView(label("数量 ${line.qty}　金額 ${money.format(line.amount/1000)} 千円　平米 ${money.format(line.sqm/1000)} 千㎡",11.5f,Color.DKGRAY,false).apply { setPadding(0,4,0,0) })
+                        val reps=listOf(line.sales,line.receiver).filter { it.isNotBlank() }.joinToString(" / ")
+                        if(reps.isNotBlank()) detail.addView(label("担当 $reps",10.5f,Color.GRAY,false).apply { setPadding(0,3,0,0) })
+                        group.addView(detail)
+                    }
+                    box.addView(group,margin())
+                }
             }
         }
     }
 
-    private fun choose(code:Int,mime:String) { val i=Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type=mime; putExtra(Intent.EXTRA_MIME_TYPES,arrayOf(mime,"application/vnd.ms-excel.sheet.macroEnabled.12","application/zip","text/csv")) }; startActivityForResult(i,code) }
+    private fun choose(code:Int,mime:String) { val i=Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type="*/*"; putExtra(Intent.EXTRA_MIME_TYPES,arrayOf(mime,"application/vnd.ms-excel","application/vnd.ms-excel.sheet.macroEnabled.12","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","application/zip","application/octet-stream","text/csv")) }; startActivityForResult(i,code) }
     @Deprecated("Deprecated") override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) { super.onActivityResult(requestCode,resultCode,data); if(resultCode!=RESULT_OK)return; val uri=data?.data?:return; thread { try { when(requestCode){11->importTargets(uri);12->importSales(uri);13->importOrders(uri)}; runOnUiThread { Toast.makeText(this,"読み込みました",Toast.LENGTH_LONG).show(); render() } } catch(e:Exception) { runOnUiThread { Toast.makeText(this,e.message?:"読み込みに失敗しました",Toast.LENGTH_LONG).show() } } } }
 
     private fun importTargets(uri:Uri) {
         val book=OpenXml.read(contentResolver.openInputStream(uri)!!)
-        val db=db; db.beginTransaction(); try { db.delete("sd_target",null,null)
+        val db=db; var imported=0; db.beginTransaction(); try { db.delete("sd_target",null,null)
             book.forEach { (_,rows) ->
                 if(rows.size<6)return@forEach
                 val id=rows.getOrNull(2)?.getOrNull(1).orEmpty().trim(); val name=rows.getOrNull(2)?.getOrNull(2).orEmpty().trim()
@@ -202,10 +228,11 @@ class SalesDashboardActivity : Activity() {
                     listOf(2,3,4,5,6,7,9,10,11,12,13,14).forEachIndexed { mi, col ->
                         val value=row.getOrNull(col)?.toDoubleOrNull()?:0.0
                         val month=months()[mi]
-                        db.insert("sd_target",null,ContentValues().apply { put("customer_no",customer);put("customer_name",customerName);put("category",category);put("metric",metric);put("month",month);put("value",value) })
+                        db.insert("sd_target",null,ContentValues().apply { put("customer_no",customer);put("customer_name",customerName);put("category",category);put("metric",metric);put("month",month);put("value",value) }); imported++
                     }
                 }
             }
+            if(imported==0)error("今期目標のデータが見つかりません。販売目標表（.xlsm）を選択してください")
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
     }
