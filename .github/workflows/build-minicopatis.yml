@@ -1,4 +1,5 @@
 name: Build MiniCoPaTis APK
+# Rebuild after v1.3.2 UI and import fixes
 
 on:
   workflow_dispatch:
