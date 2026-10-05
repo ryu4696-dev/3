@@ -85,7 +85,6 @@ class SalesDashboardActivity : Activity() {
     }
 
     private fun renderPerformance(body: LinearLayout) {
-        val imports = card()
         val categories = listOf("合計", "段ボール", "商品", "版代型代", "運賃", "その他")
         val categoryRail = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(6, 6, 6, 6); background = rounded(Color.rgb(238, 240, 247)) }
         val categoryScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
@@ -293,7 +292,7 @@ class SalesDashboardActivity : Activity() {
         thread {
             try {
                 val message=when(requestCode){11->"販売目標を読み込みました（${importTargets(uri)}件）";12->{importSales(uri);"売上実績を読み込みました"};13->{importOrders(uri);"受注明細を読み込みました"};else->"読み込みました"}
-                runOnUiThread { Toast.makeText(this,message,Toast.LENGTH_LONG).show(); if(intent.getBooleanExtra("import_only",false)) finish() else render() }
+                runOnUiThread { Toast.makeText(this,message,Toast.LENGTH_LONG).show(); if(intent.getBooleanExtra("import_only",false)) { setResult(RESULT_OK); finish() } else render() }
             } catch(e:Exception) {
                 android.util.Log.e("SalesDashboard","Import failed: uri=$uri mime=${contentResolver.getType(uri)}",e)
                 runOnUiThread { Toast.makeText(this,e.message?:"読み込みに失敗しました",Toast.LENGTH_LONG).show(); if(intent.getBooleanExtra("import_only",false)) finish() else render() }
