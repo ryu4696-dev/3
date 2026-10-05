@@ -189,7 +189,7 @@ class SalesDashboardActivity : Activity() {
     private fun sum(table:String,where:String,args:List<String>):Double{var x=0.0;db.rawQuery("SELECT SUM(value) FROM $table WHERE $where",args.toTypedArray()).use{if(it.moveToFirst())x=it.getDouble(0)};return x}
     private fun months(): List<String> =(4..15).map{m->val year=2026+(m-1)/12;val month=(m-1)%12+1;"%04d-%02d".format(year,month)}
     private fun category(raw:String)=when{raw.contains("段ボール")||raw.contains("ダンボール")||raw.contains("箱") ->"段ボール";raw.contains("商品") ->"商品";raw.contains("版")||raw.contains("型") ->"版代型代";raw.contains("運賃")||raw.contains("送料") ->"運賃";else->"その他"}
-    private fun displayDate(value:String):String { val n=value.toDoubleOrNull(); return if(n!=null&&n>30000&&n<80000) java.time.LocalDate.of(1899,12,30).plusDays(n.toLong()).toString() else value }
+    private fun displayDate(value:String):String { val d=value.filter{it.isDigit()}; if(d.length==8) return "${d.substring(0,4)}-${d.substring(4,6)}-${d.substring(6,8)}"; val n=value.toDoubleOrNull(); return if(n!=null&&n>30000&&n<80000) java.time.LocalDate.of(1899,12,30).plusDays(n.toLong()).toString() else value }
     private fun normalizeNo(s:String):String{val v=s.trim();return if(v.length>1&&v.last() in '1'..'9')v.dropLast(1)+"0" else v}
     private fun card()=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(16,15,16,15);background=android.graphics.drawable.GradientDrawable().apply{setColor(Color.WHITE);cornerRadius=18f}}
     private fun margin()=LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=12}
