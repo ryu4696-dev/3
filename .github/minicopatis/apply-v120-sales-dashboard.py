@@ -10,6 +10,14 @@ if marker not in s:
 if "販売目標を開く" not in s:
     extra = '''
 
+        val dataImportCard = card()
+        dataImportCard.addView(text("データを読み込む", 19f, Color.rgb(15, 23, 42), Typeface.BOLD).apply { setPadding(0, 0, 0, dp(8)) })
+        dataImportCard.addView(text("販売目標・売上実績・受注情報", 12.5f, Color.rgb(100, 116, 139), Typeface.NORMAL).apply { setPadding(0, 0, 0, dp(8)) })
+        dataImportCard.addView(actionButton("販売目標表（Excel）を読み込む", false).apply { setOnClickListener { startActivity(Intent(this@MainActivity, SalesDashboardActivity::class.java).putExtra("import_only", true).putExtra("import_type", "target")) } }, fullWidth(dp(46)))
+        dataImportCard.addView(actionButton("売上実績（CSV）を読み込む", false).apply { setOnClickListener { startActivity(Intent(this@MainActivity, SalesDashboardActivity::class.java).putExtra("import_only", true).putExtra("import_type", "sales")) } }, fullWidth(dp(46)))
+        dataImportCard.addView(actionButton("受注明細表（Excel）を読み込む", false).apply { setOnClickListener { startActivity(Intent(this@MainActivity, SalesDashboardActivity::class.java).putExtra("import_only", true).putExtra("import_type", "orders")) } }, fullWidth(dp(46)))
+        root.addView(dataImportCard, fullWidthWrap().apply { bottomMargin = dp(16) })
+
         val goalCard = card()
         goalCard.addView(text("販売目標", 19f, Color.rgb(15, 23, 42), Typeface.BOLD).apply { setPadding(0, 0, 0, dp(12)) })
         goalCard.addView(text("全社・得意先別の目標と月別実績", 12.5f, Color.rgb(100, 116, 139), Typeface.NORMAL).apply { setPadding(0, 0, 0, dp(12)) })
@@ -76,8 +84,8 @@ manifest.write_text(m)
 
 build = Path("ledgerapp/app/build.gradle")
 b = build.read_text()
-b, code_count = re.subn(r"versionCode\s+\d+", "versionCode 25", b, count=1)
-b, name_count = re.subn(r"versionName\s+'[^']+'", "versionName '1.3.5'", b, count=1)
+b, code_count = re.subn(r"versionCode\s+\d+", "versionCode 26", b, count=1)
+b, name_count = re.subn(r"versionName\s+'[^']+'", "versionName '1.3.6'", b, count=1)
 if code_count != 1 or name_count != 1:
     raise SystemExit("app version declarations not found")
 build.write_text(b)
