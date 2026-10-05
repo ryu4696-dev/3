@@ -262,8 +262,8 @@ elif "CREATE TABLE IF NOT EXISTS sd_actual" not in r:
 # Bump version and copy the dashboard source into the generated Android project.
 build = Path("ledgerapp/app/build.gradle")
 b = build.read_text()
-b, code_count = re.subn(r"versionCode\s+\d+", "versionCode 28", b, count=1)
-b, name_count = re.subn(r"versionName\s+'[^']+'", "versionName '1.3.8'", b, count=1)
+b, code_count = re.subn(r"versionCode\s+\d+", "versionCode 29", b, count=1)
+b, name_count = re.subn(r"versionName\s+'[^']+'", "versionName '1.3.9'", b, count=1)
 if code_count != 1 or name_count != 1:
     raise SystemExit("app version declarations not found")
 build.write_text(b)
