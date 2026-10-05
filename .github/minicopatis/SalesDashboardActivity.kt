@@ -26,7 +26,7 @@ import kotlin.concurrent.thread
 
 class SalesDashboardActivity : Activity() {
     private val db by lazy { DataRepository(this).writableDatabase }
-    private val money = DecimalFormat("#,##0.0")
+    private val money = DecimalFormat("#,##0")
     private var filter = ""
     private var orderContainer: LinearLayout? = null
     private var selectedCategory = "合計"
@@ -55,6 +55,10 @@ class SalesDashboardActivity : Activity() {
         if (ordersOnly) renderOrders(body) else renderPerformance(body)
         scroll.addView(body)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.isFocusableInTouchMode = true
+        root.requestFocus()
+        window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN or android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        if (ordersOnly) window.decorView.post { root.requestFocus() }
         setContentView(root)
         if (!ordersOnly) scroll.post { scroll.scrollTo(0, lastScrollY) }
     }
@@ -109,7 +113,7 @@ class SalesDashboardActivity : Activity() {
         body.addView(label("全社・得意先別　タップすると月別に展開", 16f, Color.rgb(15, 23, 42), true).apply { setPadding(4, 4, 4, 10) })
 
         val companies = mutableListOf<Pair<String, String>>("全体" to "全社")
-        db.rawQuery("SELECT customer_no,MAX(customer_name) FROM sd_target WHERE customer_no<>'全体' GROUP BY customer_no ORDER BY MAX(customer_name)", null).use {
+        db.rawQuery("SELECT customer_no,MAX(customer_name) FROM (SELECT customer_no,customer_name FROM sd_target UNION ALL SELECT customer_no,customer_name FROM sd_actual) WHERE customer_no<>'全体' GROUP BY customer_no ORDER BY MAX(customer_name)", null).use {
             while (it.moveToNext()) companies += it.getString(0) to it.getString(1).ifBlank { it.getString(0) }
         }
         val known = companies.map { it.first }.toSet()
@@ -212,13 +216,13 @@ class SalesDashboardActivity : Activity() {
         val h=(row()?:error("CSVが空です")).mapIndexed { i,s->if(i==0)s.removePrefix("\uFEFF").trim() else s.trim() }; val ix=h.withIndex().associate{it.value to it.index}
         fun at(r:List<String>, name:String)=r.getOrNull(ix[name]?:-1).orEmpty().trim()
         val dateCol=ix["売上日付"]?:error("売上日付列がありません"); val noCol=ix["得意先番号"]?:error("得意先番号列がありません"); val nameCol=ix["得意先名称"]?:-1; val catCol=ix["商品区分名"]?:ix["商品区分"]?:-1; val amountCol=ix["売上金額"]?:error("売上金額列がありません");val sqmCol=ix["売上平米"]?:error("売上平米列がありません")
-        val sums=linkedMapOf<String,DoubleArray>(); var count=0
-        while(true){val r=row()?:break;val raw=r.getOrNull(noCol).orEmpty().trim();val date=r.getOrNull(dateCol).orEmpty().trim();if(raw.isBlank()||date.length<7)continue;val dm=Regex("(\\d{4})[/.-](\\d{1,2})").find(date)?:continue;val ym="%04d-%02d".format(dm.groupValues[1].toInt(),dm.groupValues[2].toInt());val customer=normalizeNo(raw);val cat=category(r.getOrNull(catCol).orEmpty());val key="$customer|$cat|$ym";val a=sums.getOrPut(key){doubleArrayOf(0.0,0.0)};a[0]+=r.getOrNull(amountCol).orEmpty().replace(",","").toDoubleOrNull()?:0.0;a[1]+=r.getOrNull(sqmCol).orEmpty().replace(",","").toDoubleOrNull()?:0.0;count++ }
+        val sums=linkedMapOf<String,DoubleArray>(); val customerNames=linkedMapOf<String,String>(); var count=0
+        while(true){val r=row()?:break;val raw=r.getOrNull(noCol).orEmpty().trim();val date=r.getOrNull(dateCol).orEmpty().trim();if(raw.isBlank()||date.length<7)continue;val dm=Regex("(\\d{4})[/.-](\\d{1,2})").find(date)?:continue;val ym="%04d-%02d".format(dm.groupValues[1].toInt(),dm.groupValues[2].toInt());val customer=normalizeNo(raw);val name=r.getOrNull(nameCol).orEmpty().trim();if(name.isNotBlank())customerNames[customer]=name;val cat=category(r.getOrNull(catCol).orEmpty());val key="$customer|$cat|$ym";val a=sums.getOrPut(key){doubleArrayOf(0.0,0.0)};a[0]+=r.getOrNull(amountCol).orEmpty().replace(",","").toDoubleOrNull()?:0.0;a[1]+=r.getOrNull(sqmCol).orEmpty().replace(",","").toDoubleOrNull()?:0.0;count++ }
         reader.close(); if(count==0)error("有効な売上行がありません")
         val totals=linkedMapOf<String,DoubleArray>()
         sums.forEach { (key,a) -> val p=key.split('|'); val k="全体|${p[1]}|${p[2]}"; val t=totals.getOrPut(k){doubleArrayOf(0.0,0.0)};t[0]+=a[0];t[1]+=a[1] }
         sums.putAll(totals)
-        val db=db;db.beginTransaction();try{db.delete("sd_actual",null,null);sums.forEach{(key,a)->val p=key.split('|');db.insert("sd_actual",null,ContentValues().apply{put("customer_no",p[0]);put("customer_name","");put("category",p[1]);put("month",p[2]);put("amount",a[0]);put("sqm",a[1])})};db.setTransactionSuccessful()}finally{db.endTransaction()}
+        val db=db;db.beginTransaction();try{db.delete("sd_actual",null,null);sums.forEach{(key,a)->val p=key.split('|');db.insert("sd_actual",null,ContentValues().apply{put("customer_no",p[0]);put("customer_name",customerNames[p[0]].orEmpty());put("category",p[1]);put("month",p[2]);put("amount",a[0]);put("sqm",a[1])})};db.setTransactionSuccessful()}finally{db.endTransaction()}
     }
 
     private fun importOrders(uri:Uri) {
@@ -273,7 +277,7 @@ class SalesDashboardActivity : Activity() {
         fun read(input:java.io.InputStream):List<Pair<String,List<List<String>>>> {
             val entries=linkedMapOf<String,ByteArray>();ZipInputStream(input).use{z->while(true){val e=z.nextEntry?:break;if(!e.isDirectory)entries[e.name]=z.readBytes()}}
             fun parseStrings(bytes:ByteArray?):List<String>{if(bytes==null)return emptyList();val p=Xml.newPullParser();p.setInput(bytes.inputStream(),"UTF-8");val out= mutableListOf<String>();var inside=false;val b=StringBuilder();var event=p.eventType;while(event!=XmlPullParser.END_DOCUMENT){if(event==XmlPullParser.START_TAG&&p.name=="si"){inside=true;b.setLength(0)}else if(event==XmlPullParser.START_TAG&&p.name=="t"&&inside){b.append(p.nextText())}else if(event==XmlPullParser.END_TAG&&p.name=="si"){out+=b.toString();inside=false};event=p.next()};return out}
-            val shared=parseStrings(entries["xl/sharedStrings.xml"]);val sheets=entries.keys.filter{it.matches(Regex("xl/worksheets/sheet[0-9]+\\.xml"))}.sortedBy{it.substringAfter("sheet").substringBefore(".").toInt()}
+            val shared=parseStrings(entries["xl/sharedStrings.xml"]);val sheets=entries.keys.filter{it.matches(Regex("xl/worksheets/sheet[0-9]+\\.xml"))}.sortedBy{Regex("sheet(\\d+)\\.xml$").find(it)?.groupValues?.get(1)?.toIntOrNull() ?: Int.MAX_VALUE}
             val names=linkedMapOf<String,String>();val workbook=entries["xl/workbook.xml"];val rels=entries["xl/_rels/workbook.xml.rels"]
             if(workbook!=null&&rels!=null){val targetById=linkedMapOf<String,String>();val rp=Xml.newPullParser();rp.setInput(rels.inputStream(),"UTF-8");var ev=rp.eventType;while(ev!=XmlPullParser.END_DOCUMENT){if(ev==XmlPullParser.START_TAG&&rp.name=="Relationship")targetById[rp.getAttributeValue(null,"Id")]=rp.getAttributeValue(null,"Target");ev=rp.next()};val wp=Xml.newPullParser();wp.setInput(workbook.inputStream(),"UTF-8");ev=wp.eventType;while(ev!=XmlPullParser.END_DOCUMENT){if(ev==XmlPullParser.START_TAG&&wp.name=="sheet"){val nm=wp.getAttributeValue(null,"name")?:"";val id=wp.getAttributeValue("http://schemas.openxmlformats.org/officeDocument/2006/relationships","id") ?: (0 until wp.attributeCount).firstOrNull{wp.getAttributeName(it)=="id"}?.let{wp.getAttributeValue(it)};val target=targetById[id];if(target!=null)names["xl/"+target.removePrefix("/").removePrefix("xl/")]=nm};ev=wp.next()}}
             return sheets.map{path->val rows= mutableListOf<List<String>>();val p=Xml.newPullParser();p.setInput(entries[path]!!.inputStream(),"UTF-8");var row= mutableListOf<String>();var cellRef="";var cellType="";var value="";var currentRow=0;var ev=p.eventType;while(ev!=XmlPullParser.END_DOCUMENT){if(ev==XmlPullParser.START_TAG){when(p.name){"row"->{currentRow=p.getAttributeValue(null,"r")?.toIntOrNull()?:rows.size+1;while(rows.size<currentRow-1)rows.add(emptyList<String>());row= mutableListOf()};"c"->{cellRef=p.getAttributeValue(null,"r")?:"";cellType=p.getAttributeValue(null,"t")?:"";value=""};"v","t"->{value=p.nextText();val col=cellRef.takeWhile{it.isLetter()};val index=col.fold(0){a,ch->a*26+(ch.uppercaseChar()-'A'+1)}-1;while(row.size<=index)row.add("");row[index]=if(cellType=="s")shared.getOrNull(value.toIntOrNull()?:-1).orEmpty() else value}}}else if(ev==XmlPullParser.END_TAG&&p.name=="row"){rows+=row};ev=p.next()};(names[path]?:path.substringAfterLast('/')) to rows}
