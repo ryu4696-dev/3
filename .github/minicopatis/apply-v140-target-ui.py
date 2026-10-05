@@ -159,7 +159,7 @@ s = s.replace(insert_anchor, helpers + insert_anchor, 1)
 
 old = '''                box.addView(card().apply {
                     background=rounded(Color.rgb(230,238,250))
-                    addView(label("$date　${companies.size}社・$dayCount件",15f,Color.rgb(35,58,115),true))
+                    addView(label("$date　${companies.size}社・${dayCount}件",15f,Color.rgb(35,58,115),true))
                 },margin())'''
 new = '''                box.addView(card().apply {
                     setPadding(dp(12), dp(10), dp(12), dp(10))
@@ -168,7 +168,7 @@ new = '''                box.addView(card().apply {
                         cornerRadius=16f
                         setStroke(dp(1), Color.rgb(226,229,234))
                     }
-                    addView(label("$date　${companies.size}社・$dayCount件",15f,Color.rgb(55,65,81),true))
+                    addView(label("$date　${companies.size}社・${dayCount}件",15f,Color.rgb(55,65,81),true))
                 },margin())'''
 if old not in s:
     raise SystemExit("order day header anchor not found")
