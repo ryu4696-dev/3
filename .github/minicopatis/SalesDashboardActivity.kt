@@ -121,8 +121,6 @@ class SalesDashboardActivity : Activity() {
         }
         summary.addView(values)
         body.addView(summary, margin())
-        body.addView(label("全社・得意先別　タップすると月別に展開", 16f, Color.rgb(15, 23, 42), true).apply { setPadding(4, 4, 4, 10) })
-
         val companies = mutableListOf<Pair<String, String>>("全体" to "全社")
         db.rawQuery("SELECT customer_no,MAX(customer_name) FROM (SELECT customer_no,customer_name FROM sd_target UNION ALL SELECT customer_no,customer_name FROM sd_actual) WHERE customer_no<>'全体' GROUP BY customer_no ORDER BY MAX(customer_name)", null).use {
             while (it.moveToNext()) companies += it.getString(0) to it.getString(1).ifBlank { it.getString(0) }
@@ -324,12 +322,12 @@ class SalesDashboardActivity : Activity() {
                     val group=card().apply { setOnClickListener { if(open) expandedOrderGroups.remove(key) else expandedOrderGroups.add(key);showOrderRows() } }
                     val heading=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL }
                     heading.addView(label(company,15f,Color.rgb(15,23,42),true),LinearLayout.LayoutParams(0,-2,1f))
-                    heading.addView(label("${rows.size}件　${money.format(amount/1000)}千円　${money.format(sqm/1000)}千㎡　${if(open)"⌃" else "⌄"}",11f,Color.GRAY,true))
+                    heading.addView(label("${rows.size}件　${money.format(amount/1000)}千円　${DecimalFormat("#,##0.##").format(sqm)}㎡　${if(open)"⌃" else "⌄"}",11f,Color.GRAY,true))
                     group.addView(heading)
                     if(open) rows.forEach { (category,line) ->
                         val detail=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(0,10,0,8) }
                         detail.addView(label("$category　${line.item}",13f,Color.DKGRAY,true))
-                        detail.addView(label("数量 ${line.qty}　金額 ${money.format(line.amount/1000)} 千円　平米 ${money.format(line.sqm/1000)} 千㎡",11.5f,Color.DKGRAY,false).apply { setPadding(0,4,0,0) })
+                        detail.addView(label("数量 ${line.qty}　金額 ${money.format(line.amount/1000)} 千円　平米 ${DecimalFormat("#,##0.##").format(line.sqm)} ㎡",11.5f,Color.DKGRAY,false).apply { setPadding(0,4,0,0) })
                         val reps=listOf(line.sales,line.receiver).filter { it.isNotBlank() }.joinToString(" / ")
                         if(reps.isNotBlank()) detail.addView(label("担当 $reps",10.5f,Color.GRAY,false).apply { setPadding(0,3,0,0) })
                         group.addView(detail)
@@ -381,7 +379,9 @@ class SalesDashboardActivity : Activity() {
                     val prior=rows.getOrNull(r-1)?.getOrNull(0).orEmpty().trim()
                     if((metric=="平米"&&!prior.startsWith("売上平米"))||(metric=="金額"&&!prior.startsWith("売上金額"))) continue
                     listOf(2,3,4,5,6,7,9,10,11,12,13,14).forEachIndexed { mi, col ->
-                        val value=row.getOrNull(col)?.toDoubleOrNull()?:0.0
+                        // Workbook targets are stored as thousand-yen / thousand-square-meter units.
+                        // Keep the database in base units, matching the sales CSV importer.
+                        val value=(row.getOrNull(col)?.toDoubleOrNull()?:0.0)*1000.0
                         val month=months()[mi]
                         db.insert("sd_target",null,ContentValues().apply { put("customer_no",customer);put("customer_name",customerName);put("category",category);put("metric",metric);put("month",month);put("value",value) }); imported++
                     }
