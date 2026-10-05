@@ -32,6 +32,10 @@ class SalesDashboardActivity : Activity() {
     private var orderContainer: LinearLayout? = null
     private var selectedCategory = "合計"
     private var selectedMetric = "金額"
+    private var sortMetric = "金額"
+    private var sortPeriod = "年間"
+    private var sortGoodFirst = true
+    private var sortMonth = "2026-04"
     private var expandedCustomer = "全体"
     private var lastScrollY = 0
     private val expandedOrderGroups = mutableSetOf<String>()
@@ -41,7 +45,22 @@ class SalesDashboardActivity : Activity() {
         db.execSQL("CREATE TABLE IF NOT EXISTS sd_target(customer_no TEXT, customer_name TEXT, category TEXT, metric TEXT, month TEXT, value REAL, PRIMARY KEY(customer_no,category,metric,month))")
         db.execSQL("CREATE TABLE IF NOT EXISTS sd_actual(customer_no TEXT, customer_name TEXT, category TEXT, month TEXT, amount REAL, sqm REAL, PRIMARY KEY(customer_no,category,month))")
         db.execSQL("CREATE TABLE IF NOT EXISTS sd_order(id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, delivery TEXT, customer TEXT, item TEXT, qty TEXT, amount REAL, sqm REAL, sales TEXT, receiver TEXT)")
-        render()
+        if (intent.getBooleanExtra("import_only", false)) {
+            renderImportStart()
+            window.decorView.post {
+                val code = when (intent.getStringExtra("import_type")) { "target" -> 11; "sales" -> 12; "orders" -> 13; else -> 11 }
+                val mime = when (code) { 11, 13 -> "application/vnd.ms-excel.sheet.macroEnabled.12"; else -> "text/csv" }
+                choose(code, mime)
+            }
+        } else render()
+    }
+
+    private fun renderImportStart() {
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(246,248,251)); setPadding(dp(18),dp(18),dp(18),dp(18)) }
+        root.addView(label("‹ ホームへ戻る",16f,Color.rgb(15,91,70),true).apply { setOnClickListener { finish() } })
+        root.addView(label("データを読み込む",20f,Color.rgb(15,23,42),true).apply { setPadding(0,dp(18),0,dp(8)) })
+        root.addView(label("ファイルを選択してください。Excelは .xlsx / .xlsm、CSVは .csv に対応します。",14f,Color.GRAY,false))
+        setContentView(root)
     }
 
     private fun render() {
@@ -67,12 +86,6 @@ class SalesDashboardActivity : Activity() {
 
     private fun renderPerformance(body: LinearLayout) {
         val imports = card()
-        imports.addView(label("販売データ", 17f, Color.rgb(15, 23, 42), true))
-        imports.addView(label("目標表と売上CSVを読み込みます。受注情報とは別画面です。", 12.5f, Color.GRAY, false).apply { setPadding(0, 5, 0, 8) })
-        imports.addView(button("販売目標表（Excel）を読み込む", false).apply { setOnClickListener { choose(11, "application/vnd.ms-excel") } })
-        imports.addView(button("売上実績（CSV）を読み込む", false).apply { setOnClickListener { choose(12, "text/*") } })
-        body.addView(imports, margin())
-
         val categories = listOf("合計", "段ボール", "商品", "版代型代", "運賃", "その他")
         val categoryRail = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(6, 6, 6, 6); background = rounded(Color.rgb(238, 240, 247)) }
         val categoryScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
@@ -95,6 +108,8 @@ class SalesDashboardActivity : Activity() {
         }
         val unitCard = card().apply { addView(unitRail) }
         body.addView(unitCard, margin())
+
+        addSortControls(body)
 
         val months = months()
         val allTarget = monthTotal("sd_target", "全体", months, selectedMetric, selectedCategory)
@@ -120,7 +135,30 @@ class SalesDashboardActivity : Activity() {
         }
         val known = companies.map { it.first }.toSet()
         db.rawQuery("SELECT customer_no FROM sd_actual WHERE customer_no<>'全体' GROUP BY customer_no ORDER BY customer_no", null).use { while (it.moveToNext()) if (it.getString(0) !in known) companies += it.getString(0) to it.getString(0) }
-        companies.forEach { (no, name) ->
+        val orderedCompanies = companies.take(1) + companies.drop(1).sortedWith { left, right ->
+            val periodMonths = when (sortPeriod) {
+                "前期" -> months.take(6)
+                "後期" -> months.drop(6)
+                "月" -> listOf(sortMonth)
+                else -> months
+            }
+            fun score(company: Pair<String,String>): Double {
+                val no = company.first
+                val metric = if (sortMetric == "達成率") selectedMetric else sortMetric
+                val actual = monthTotal("sd_actual", no, periodMonths, metric, selectedCategory)
+                if (sortMetric != "達成率") return actual
+                val target = monthTotal("sd_target", no, periodMonths, metric, selectedCategory)
+                return if (target > 0.0) actual / target else Double.NaN
+            }
+            val a = score(left); val b = score(right)
+            when {
+                a.isNaN() && b.isNaN() -> left.second.compareTo(right.second)
+                a.isNaN() -> 1
+                b.isNaN() -> -1
+                else -> (if (sortGoodFirst) b.compareTo(a) else a.compareTo(b)).takeIf { it != 0 } ?: left.second.compareTo(right.second)
+            }
+        }
+        orderedCompanies.forEach { (no, name) ->
             val target = monthTotal("sd_target", no, months, selectedMetric, selectedCategory)
             val actual = monthTotal("sd_actual", no, months, selectedMetric, selectedCategory)
             val open = expandedCustomer == no
@@ -167,11 +205,29 @@ class SalesDashboardActivity : Activity() {
         }
     }
 
+    private fun addSortControls(body: LinearLayout) {
+        fun rail(options: List<String>, selected: String, onSelect: (String) -> Unit) {
+            val strip = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; setPadding(dp(3),dp(3),dp(3),dp(3)); background=rounded(Color.rgb(238,240,247)) }
+            options.forEach { option ->
+                val chip=TextView(this).apply { text=option; gravity=Gravity.CENTER; textSize=12f; setPadding(dp(9),dp(9),dp(9),dp(9)); setTextColor(if(option==selected)Color.rgb(52,81,200) else Color.rgb(89,97,116)); background=rounded(if(option==selected)Color.WHITE else Color.TRANSPARENT); setOnClickListener { onSelect(option); render() } }
+                strip.addView(chip,LinearLayout.LayoutParams(-2,-2))
+            }
+            val scroller=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false; addView(strip) }
+            body.addView(card().apply { addView(scroller) },margin())
+        }
+        rail(listOf("金額","平米","達成率"),sortMetric) { sortMetric=it }
+        rail(listOf("前期","後期","年間","月"),sortPeriod) { sortPeriod=it }
+        rail(listOf("良い順","悪い順"),if(sortGoodFirst)"良い順" else "悪い順") { sortGoodFirst=it=="良い順" }
+        if(sortPeriod=="月") {
+            val monthNames=months().associateBy({ it },{ "${it.substring(5).toInt()}月" })
+            rail(monthNames.values.toList(),monthNames[sortMonth]?:"4月") { chosen -> sortMonth=monthNames.entries.first{it.value==chosen}.key }
+        }
+    }
+
     private fun renderOrders(body: LinearLayout) {
         val bar=card()
         bar.addView(label("受注明細",18f,Color.rgb(15,23,42),true))
         bar.addView(label("納期ごと・得意先ごとにまとめています。行をタップすると明細が開きます。",12f,Color.GRAY,false).apply { setPadding(0,4,0,6) })
-        bar.addView(button("受注明細表（Excel）を読み込む",false).apply { setOnClickListener { choose(13,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") } })
         val search=EditText(this).apply { hint="得意先・品名で検索"; isSingleLine=true; setText(filter); addTextChangedListener(object: android.text.TextWatcher { override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}; override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){filter=s?.toString().orEmpty(); showOrderRows()}; override fun afterTextChanged(s:android.text.Editable?){} }) }
         bar.addView(search)
         body.addView(bar,margin())
@@ -221,11 +277,32 @@ class SalesDashboardActivity : Activity() {
         }
     }
 
-    private fun choose(code:Int,mime:String) { val i=Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type="*/*"; putExtra(Intent.EXTRA_MIME_TYPES,arrayOf(mime,"application/vnd.ms-excel","application/vnd.ms-excel.sheet.macroEnabled.12","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","application/zip","application/octet-stream","text/csv")) }; startActivityForResult(i,code) }
-    @Deprecated("Deprecated") override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) { super.onActivityResult(requestCode,resultCode,data); if(resultCode!=RESULT_OK)return; val uri=data?.data?:return; thread { try { val message=when(requestCode){11->"販売目標を読み込みました（${importTargets(uri)}件）";12->{importSales(uri);"売上実績を読み込みました"};13->{importOrders(uri);"受注明細を読み込みました"};else->"読み込みました"}; runOnUiThread { Toast.makeText(this,message,Toast.LENGTH_LONG).show(); render() } } catch(e:Exception) { android.util.Log.e("SalesDashboard","Excel/CSV import failed",e);runOnUiThread { Toast.makeText(this,e.message?:"読み込みに失敗しました",Toast.LENGTH_LONG).show() } } } }
+    private fun choose(code:Int,mime:String) {
+        val i=Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE); type="*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES,arrayOf("application/vnd.ms-excel.sheet.macroEnabled.12","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","application/vnd.ms-excel","application/zip","application/octet-stream","text/csv","text/*"))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        startActivityForResult(i,code)
+    }
+    @Deprecated("Deprecated") override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?) {
+        super.onActivityResult(requestCode,resultCode,data)
+        if(resultCode!=RESULT_OK) { if(intent.getBooleanExtra("import_only",false)) finish(); return }
+        val uri=data?.data?:return
+        try { contentResolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_:Exception) {}
+        thread {
+            try {
+                val message=when(requestCode){11->"販売目標を読み込みました（${importTargets(uri)}件）";12->{importSales(uri);"売上実績を読み込みました"};13->{importOrders(uri);"受注明細を読み込みました"};else->"読み込みました"}
+                runOnUiThread { Toast.makeText(this,message,Toast.LENGTH_LONG).show(); if(intent.getBooleanExtra("import_only",false)) finish() else render() }
+            } catch(e:Exception) {
+                android.util.Log.e("SalesDashboard","Import failed: uri=$uri mime=${contentResolver.getType(uri)}",e)
+                runOnUiThread { Toast.makeText(this,e.message?:"読み込みに失敗しました",Toast.LENGTH_LONG).show(); if(intent.getBooleanExtra("import_only",false)) finish() else render() }
+            }
+        }
+    }
 
     private fun importTargets(uri:Uri):Int {
-        val book=OpenXml.read(contentResolver.openInputStream(uri)!!)
+        val book=OpenXml.read(contentResolver.openInputStream(uri) ?: error("選択したファイルを開けませんでした。端末に保存してから再度お試しください。"))
         val db=db; var imported=0; db.beginTransaction(); try { db.delete("sd_target",null,null)
             book.forEach { (_,rows) ->
                 if(rows.size<6)return@forEach
@@ -271,7 +348,7 @@ class SalesDashboardActivity : Activity() {
     }
 
     private fun importOrders(uri:Uri) {
-        val book=OpenXml.read(contentResolver.openInputStream(uri)!!); val all= mutableListOf<Array<String>>()
+        val book=OpenXml.read(contentResolver.openInputStream(uri) ?: error("選択したファイルを開けませんでした。端末に保存してから再度お試しください。")); val all= mutableListOf<Array<String>>()
         book.forEach { (sheet,rows)->
             var header=-1; var map=emptyMap<String,Int>()
             rows.forEachIndexed { i,r->if(header<0&&r.any{it.contains("納期")}&&r.any{it.contains("請求先名")}&&r.any{it.contains("品名")}){header=i;map=r.mapIndexedNotNull{j,v->v.trim().takeIf{it.isNotBlank()}?.let{it to j}}.toMap()} }
@@ -323,6 +400,7 @@ class SalesDashboardActivity : Activity() {
     private object OpenXml {
         fun read(input:java.io.InputStream):List<Pair<String,List<List<String>>>> {
             val entries=linkedMapOf<String,ByteArray>();ZipInputStream(input).use{z->while(true){val e=z.nextEntry?:break;if(!e.isDirectory)entries[e.name]=z.readBytes()}}
+            if (entries["xl/workbook.xml"] == null || entries.keys.none { it.startsWith("xl/worksheets/") }) error("Excelブックを確認できません。対応形式は .xlsx / .xlsm です（.xls は非対応）。")
             fun parseStrings(bytes:ByteArray?):List<String>{if(bytes==null)return emptyList();val p=Xml.newPullParser();p.setInput(bytes.inputStream(),"UTF-8");val out= mutableListOf<String>();var inside=false;val b=StringBuilder();var event=p.eventType;while(event!=XmlPullParser.END_DOCUMENT){if(event==XmlPullParser.START_TAG&&p.name=="si"){inside=true;b.setLength(0)}else if(event==XmlPullParser.START_TAG&&p.name=="t"&&inside){b.append(p.nextText())}else if(event==XmlPullParser.END_TAG&&p.name=="si"){out+=b.toString();inside=false};event=p.next()};return out}
             val shared=parseStrings(entries["xl/sharedStrings.xml"]);val sheets=entries.keys.filter{it.matches(Regex("xl/worksheets/sheet[0-9]+\\.xml"))}.sortedBy{Regex("sheet(\\d+)\\.xml$").find(it)?.groupValues?.get(1)?.toIntOrNull() ?: Int.MAX_VALUE}
             val names=linkedMapOf<String,String>();val workbook=entries["xl/workbook.xml"];val rels=entries["xl/_rels/workbook.xml.rels"]
