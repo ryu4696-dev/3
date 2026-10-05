@@ -38,6 +38,8 @@ class SalesDashboardActivity : Activity() {
     private var sortMonth = "2026-04"
     private var expandedCustomer = "全体"
     private var lastScrollY = 0
+    private var customerSearchQuery = ""
+    private var performanceScroll: ScrollView? = null
     private val expandedOrderGroups = mutableSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,7 +61,6 @@ class SalesDashboardActivity : Activity() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(246,248,251)); setPadding(dp(18),dp(18),dp(18),dp(18)) }
         root.addView(label("‹ ホームへ戻る",16f,Color.rgb(15,91,70),true).apply { setOnClickListener { finish() } })
         root.addView(label("データを読み込む",20f,Color.rgb(15,23,42),true).apply { setPadding(0,dp(18),0,dp(8)) })
-        root.addView(label("ファイルを選択してください。Excelは .xlsx / .xlsm、CSVは .csv に対応します。",14f,Color.GRAY,false))
         setContentView(root)
     }
 
@@ -71,6 +72,7 @@ class SalesDashboardActivity : Activity() {
         top.addView(label(if (ordersOnly) "受注情報" else "販売目標", 20f, Color.rgb(15, 23, 42), true), LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = 18 })
         root.addView(top)
         val scroll = ScrollView(this)
+        if (!ordersOnly) performanceScroll = scroll
         scroll.setOnScrollChangeListener { _, _, y, _, _ -> if (!ordersOnly) lastScrollY = y }
         val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(14, 14, 14, 24) }
         if (ordersOnly) renderOrders(body) else renderPerformance(body)
@@ -100,13 +102,6 @@ class SalesDashboardActivity : Activity() {
         categoryScroll.addView(categoryRail)
         val catCard = card().apply { addView(categoryScroll) }
         body.addView(catCard, margin())
-
-        val unitRail = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf("金額", "平米").forEach { item ->
-            unitRail.addView(button(item, item == selectedMetric).apply { setOnClickListener { selectedMetric = item; render() } }, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = 4; rightMargin = 4 })
-        }
-        val unitCard = card().apply { addView(unitRail) }
-        body.addView(unitCard, margin())
 
         addSortControls(body)
 
@@ -157,6 +152,23 @@ class SalesDashboardActivity : Activity() {
                 else -> (if (sortGoodFirst) b.compareTo(a) else a.compareTo(b)).takeIf { it != 0 } ?: left.second.compareTo(right.second)
             }
         }
+        val companyRows = mutableListOf<Pair<View, String>>()
+        val searchRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val searchField = EditText(this).apply {
+            hint = "得意先名・番号で検索"; isSingleLine = true; textSize = 14f
+            setText(customerSearchQuery); background = rounded(Color.WHITE)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+        }
+        val clearSearch = TextView(this).apply {
+            text = "×"; textSize = 22f; gravity = Gravity.CENTER; setTextColor(Color.rgb(89, 97, 116))
+            setOnClickListener { searchField.setText("") }
+        }
+        searchRow.addView(searchField, LinearLayout.LayoutParams(0, dp(46), 1f))
+        searchRow.addView(clearSearch, LinearLayout.LayoutParams(dp(42), dp(46)))
+        body.addView(searchRow, margin())
+        val noResults = label("該当する得意先がありません", 13f, Color.rgb(100, 108, 125), false)
+        noResults.visibility = View.GONE
+        body.addView(noResults, margin())
         orderedCompanies.forEach { (no, name) ->
             val target = monthTotal("sd_target", no, months, selectedMetric, selectedCategory)
             val actual = monthTotal("sd_actual", no, months, selectedMetric, selectedCategory)
@@ -201,32 +213,84 @@ class SalesDashboardActivity : Activity() {
                 }
             }
             body.addView(item, margin())
+            companyRows += item to "$name $no"
         }
+        searchField.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                customerSearchQuery = s?.toString().orEmpty()
+                val query = customerSearchQuery.trim()
+                val matches = companyRows.filter { (_, key) -> query.isBlank() || key.contains(query, ignoreCase = true) }
+                companyRows.forEach { (view, key) -> view.visibility = if (query.isBlank() || key.contains(query, ignoreCase = true)) View.VISIBLE else View.GONE }
+                noResults.visibility = if (query.isNotBlank() && matches.isEmpty()) View.VISIBLE else View.GONE
+                clearSearch.visibility = if (query.isBlank()) View.INVISIBLE else View.VISIBLE
+                if (query.isNotBlank() && matches.isNotEmpty()) performanceScroll?.post {
+                    performanceScroll?.smoothScrollTo(0, (matches.first().first.top - dp(150)).coerceAtLeast(0))
+                }
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+        if (customerSearchQuery.isNotBlank()) {
+            val query = customerSearchQuery.trim()
+            companyRows.forEach { (view, key) -> view.visibility = if (key.contains(query, ignoreCase = true)) View.VISIBLE else View.GONE }
+            val firstMatch = companyRows.firstOrNull { (_, key) -> key.contains(query, ignoreCase = true) }
+            noResults.visibility = if (firstMatch == null) View.VISIBLE else View.GONE
+            firstMatch?.let { match ->
+                performanceScroll?.post { performanceScroll?.scrollTo(0, (match.first.top - dp(150)).coerceAtLeast(0)) }
+            }
+            searchField.text?.let { searchField.setSelection(it.length) }
+        }
+        clearSearch.visibility = if (customerSearchQuery.isBlank()) View.INVISIBLE else View.VISIBLE
     }
 
     private fun addSortControls(body: LinearLayout) {
-        fun rail(options: List<String>, selected: String, onSelect: (String) -> Unit) {
-            val strip = LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; setPadding(dp(3),dp(3),dp(3),dp(3)); background=rounded(Color.rgb(238,240,247)) }
+        val panel = card().apply { setPadding(dp(9), dp(7), dp(9), dp(7)) }
+        fun addSelectorRow(title: String, options: List<String>, selected: String, onSelect: (String) -> Unit, equalWidth: Boolean = false) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            row.addView(label(title, 11f, Color.rgb(100, 108, 125), true), LinearLayout.LayoutParams(dp(62), -2))
+            val rail = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(2), dp(2), dp(2), dp(2)); background = rounded(Color.rgb(238, 240, 247)) }
             options.forEach { option ->
-                val chip=TextView(this).apply { text=option; gravity=Gravity.CENTER; textSize=12f; setPadding(dp(9),dp(9),dp(9),dp(9)); setTextColor(if(option==selected)Color.rgb(52,81,200) else Color.rgb(89,97,116)); background=rounded(if(option==selected)Color.WHITE else Color.TRANSPARENT); setOnClickListener { onSelect(option); render() } }
-                strip.addView(chip,LinearLayout.LayoutParams(-2,-2))
+                val chip = TextView(this).apply {
+                    text = option; gravity = Gravity.CENTER; textSize = 11.5f; setPadding(dp(8), dp(7), dp(8), dp(7))
+                    setTextColor(if (option == selected) Color.rgb(52, 81, 200) else Color.rgb(89, 97, 116))
+                    background = rounded(if (option == selected) Color.WHITE else Color.TRANSPARENT)
+                    setOnClickListener { onSelect(option); render() }
+                }
+                rail.addView(chip, if (equalWidth) LinearLayout.LayoutParams(0, -2, 1f) else LinearLayout.LayoutParams(-2, -2))
             }
-            val scroller=HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false; addView(strip) }
-            body.addView(card().apply { addView(scroller) },margin())
+            if (equalWidth) {
+                row.addView(rail, LinearLayout.LayoutParams(0, -2, 1f))
+            } else {
+                val scroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(rail) }
+                row.addView(scroller, LinearLayout.LayoutParams(0, -2, 1f))
+            }
+            panel.addView(row)
         }
-        rail(listOf("金額","平米","達成率"),sortMetric) { sortMetric=it }
-        rail(listOf("前期","後期","年間","月"),sortPeriod) { sortPeriod=it }
-        rail(listOf("良い順","悪い順"),if(sortGoodFirst)"良い順" else "悪い順") { sortGoodFirst=it=="良い順" }
-        if(sortPeriod=="月") {
-            val monthNames=months().associateBy({ it },{ "${it.substring(5).toInt()}月" })
-            rail(monthNames.values.toList(),monthNames[sortMonth]?:"4月") { chosen -> sortMonth=monthNames.entries.first{it.value==chosen}.key }
+        addSelectorRow("表示", listOf("金額", "平米"), selectedMetric, { selectedMetric = it }, true)
+        addSelectorRow("並び替え", listOf("金額", "平米", "達成率"), sortMetric, { sortMetric = it })
+        val directionRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        directionRow.addView(label("順序", 11f, Color.rgb(100, 108, 125), true), LinearLayout.LayoutParams(dp(62), -2))
+        listOf("良い順" to true, "悪い順" to false).forEach { (text, goodFirst) ->
+            val chip = TextView(this).apply {
+                this.text = text; gravity = Gravity.CENTER; textSize = 11.5f; setPadding(dp(8), dp(7), dp(8), dp(7))
+                setTextColor(if (sortGoodFirst == goodFirst) Color.rgb(52, 81, 200) else Color.rgb(89, 97, 116))
+                background = rounded(if (sortGoodFirst == goodFirst) Color.WHITE else Color.TRANSPARENT)
+                setOnClickListener { sortGoodFirst = goodFirst; render() }
+            }
+            directionRow.addView(chip)
         }
+        panel.addView(directionRow)
+        addSelectorRow("期間", listOf("前期", "後期", "年間", "月"), sortPeriod, { sortPeriod = it }, true)
+        if (sortPeriod == "月") {
+            val monthNames = months().associateBy({ it }, { "${it.substring(5).toInt()}月" })
+            addSelectorRow("対象月", monthNames.values.toList(), monthNames[sortMonth] ?: "4月", { chosen -> sortMonth = monthNames.entries.first { it.value == chosen }.key })
+        }
+        body.addView(panel, margin())
     }
 
     private fun renderOrders(body: LinearLayout) {
         val bar=card()
         bar.addView(label("受注明細",18f,Color.rgb(15,23,42),true))
-        bar.addView(label("納期ごと・得意先ごとにまとめています。行をタップすると明細が開きます。",12f,Color.GRAY,false).apply { setPadding(0,4,0,6) })
         val search=EditText(this).apply { hint="得意先・品名で検索"; isSingleLine=true; setText(filter); addTextChangedListener(object: android.text.TextWatcher { override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}; override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){filter=s?.toString().orEmpty(); showOrderRows()}; override fun afterTextChanged(s:android.text.Editable?){} }) }
         bar.addView(search)
         body.addView(bar,margin())
@@ -279,7 +343,6 @@ class SalesDashboardActivity : Activity() {
     private fun choose(code:Int,mime:String) {
         val i=Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE); type="*/*"
-            putExtra(Intent.EXTRA_MIME_TYPES,arrayOf("application/vnd.ms-excel.sheet.macroEnabled.12","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","application/vnd.ms-excel","application/zip","application/octet-stream","text/csv","text/*"))
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         }
         startActivityForResult(i,code)
