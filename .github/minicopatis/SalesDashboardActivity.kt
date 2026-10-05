@@ -237,27 +237,6 @@ class SalesDashboardActivity : Activity() {
         val db=db;db.beginTransaction();try{db.delete("sd_order",null,null);all.forEach{r->db.insert("sd_order",null,ContentValues().apply{put("category",r[0]);put("delivery",r[1]);put("customer",r[2]);put("item",r[3]);put("qty",r[4]);put("amount",r[5].toDoubleOrNull()?:0.0);put("sqm",r[6].toDoubleOrNull()?:0.0);put("sales",r[7]);put("receiver",r[8])})};db.setTransactionSuccessful()}finally{db.endTransaction()}
     }
 
-    private val unitLabel get() = if (selectedMetric == "金額") "千円" else "千㎡"
-    private fun rounded(color:Int)=android.graphics.drawable.GradientDrawable().apply{setColor(color);cornerRadius=14f}
-    private fun shown(v:Double)=if(selectedMetric=="金額") money.format(v/1000) else DecimalFormat("#,##0.0").format(v/1000)
-    private fun percent(a:Double,t:Double)=if(t>0) "${DecimalFormat("0.0").format(a/t*100)}%" else "—"
-    private fun metricKey()=if(selectedMetric=="金額") "金額" else "平米"
-    private fun monthTotal(table:String,no:String,months:List<String>,metric:String,cat:String):Double {
-        val field=if(table=="sd_target") "value" else if(metric=="金額") "amount" else "sqm"
-        val where=StringBuilder("customer_no=? AND month IN (${months.joinToString { "?" }})")
-        val args= mutableListOf(no).apply{addAll(months)}
-        if(cat!="合計"){where.append(" AND category=?");args.add(cat)}
-        if(table=="sd_target"){where.append(" AND metric=?");args.add(if(metric=="金額")"金額" else "平米")}
-        var result=0.0;db.rawQuery("SELECT SUM($field) FROM $table WHERE $where",args.toTypedArray()).use{if(it.moveToFirst())result=it.getDouble(0)};return result
-    }
-    private fun oneValue(table:String,no:String,month:String,metric:String,cat:String):Double {
-        val field=if(table=="sd_target") "value" else if(metric=="金額") "amount" else "sqm"
-        val where=StringBuilder("customer_no=? AND month=?");val args= mutableListOf(no,month)
-        if(cat!="合計"){where.append(" AND category=?");args.add(cat)}
-        if(table=="sd_target"){where.append(" AND metric=?");args.add(if(metric=="金額")"金額" else "平米")}
-        var result=0.0;db.rawQuery("SELECT SUM($field) FROM $table WHERE $where",args.toTypedArray()).use{if(it.moveToFirst())result=it.getDouble(0)};return result
-    }
-
     private fun rounded(color:Int)=android.graphics.drawable.GradientDrawable().apply{setColor(color);cornerRadius=16f}
     private val unitLabel get() = if(selectedMetric=="金額") "千円" else "千㎡"
     private fun shown(v:Double)=if(selectedMetric=="金額") money.format(v/1000) else DecimalFormat("#,##0.0").format(v/1000)
