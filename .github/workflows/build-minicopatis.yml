@@ -206,6 +206,19 @@ jobs:
           python3 .github/minicopatis/apply-v140-target-ui.py
           python3 .github/minicopatis/apply-v141-color-clarity.py
 
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiniCoPaTis-source-snapshot
+          path: |
+            ledgerapp/app/src/main/java/jp/co/ichika/salesledger/MainActivity.kt
+            ledgerapp/app/src/main/java/jp/co/ichika/salesledger/SalesTableView.kt
+            ledgerapp/app/src/main/java/jp/co/ichika/salesledger/LedgerTableView.kt
+            ledgerapp/app/src/main/java/jp/co/ichika/salesledger/DataRepository.kt
+            ledgerapp/app/src/main/java/jp/co/ichika/salesledger/Models.kt
+            ledgerapp/app/src/main/java/jp/co/ichika/salesledger/SalesDashboardActivity.kt
+          retention-days: 7
+
       - name: Restore quote code and icon
         run: |
           cat .github/minicopatis/quote-dex-00.b64               .github/minicopatis/quote-dex-01.b64               .github/minicopatis/quote-dex-02.b64               .github/minicopatis/quote-dex-03.b64               .github/minicopatis/quote-dex-04.b64               .github/minicopatis/quote-dex-05.b64 > /tmp/quote-dex.b64
