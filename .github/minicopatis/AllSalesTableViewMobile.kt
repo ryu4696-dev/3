@@ -121,9 +121,26 @@ class AllSalesTableView(context: Context) : ScrollView(context) {
         names.addView(label(product.productName.ifBlank { product.productNumber }, 12.8f, Color.rgb(42,55,73), true).apply { maxLines=2 })
         names.addView(label(product.productNumber, 10f, Color.rgb(107,114,128), false).apply { setPadding(0,dp(2),0,0) })
         head.addView(names, LinearLayout.LayoutParams(0,-2,1f))
-        head.addView(label("¥" + fmt.format(total.amount), 11.5f, Color.rgb(15,105,76), true))
-        head.addView(label(if (open) "　⌃" else "　⌄", 14f, Color.rgb(100,116,139), true))
+        head.addView(label(if (open) "⌃" else "⌄", 14f, Color.rgb(100,116,139), true))
         box.addView(head)
+
+        val productMetrics = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0,dp(7),0,0)
+        }
+        productMetrics.addView(
+            label("¥" + fmt.format(total.amount), 11.5f, Color.rgb(15,105,76), true).apply { gravity=Gravity.CENTER },
+            LinearLayout.LayoutParams(0,-2,1f)
+        )
+        productMetrics.addView(
+            label(fmt.format(total.sqm) + "㎡", 11.5f, Color.rgb(52,81,160), true).apply { gravity=Gravity.CENTER },
+            LinearLayout.LayoutParams(0,-2,1f)
+        )
+        productMetrics.addView(
+            label("数量 " + fmt.format(total.quantity), 11.5f, Color.rgb(71,85,105), true).apply { gravity=Gravity.CENTER },
+            LinearLayout.LayoutParams(0,-2,1f)
+        )
+        box.addView(productMetrics)
 
         if (open) {
             months.forEachIndexed { index, month ->
@@ -159,9 +176,10 @@ class AllSalesTableView(context: Context) : ScrollView(context) {
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(9),dp(8),dp(9),dp(8))
         background = rounded(if (alt) Color.rgb(245,248,251) else Color.WHITE, Color.rgb(218,224,233))
-        addView(label(monthLabel(month), 11f, Color.rgb(55,65,81), true), LinearLayout.LayoutParams(dp(58),-2))
+        addView(label(monthLabel(month), 11f, Color.rgb(55,65,81), true), LinearLayout.LayoutParams(dp(52),-2))
         addView(label("¥" + fmt.format(metrics.amount), 11f, Color.rgb(15,105,76), true).apply { gravity=Gravity.END }, LinearLayout.LayoutParams(0,-2,1f))
         addView(label(fmt.format(metrics.sqm) + "㎡", 11f, Color.rgb(52,81,160), false).apply { gravity=Gravity.END }, LinearLayout.LayoutParams(0,-2,1f))
+        addView(label(fmt.format(metrics.quantity), 11f, Color.rgb(71,85,105), false).apply { gravity=Gravity.END }, LinearLayout.LayoutParams(0,-2,1f))
     }
 
     private fun totalOf(product: SalesProductMonthly): SalesMetrics =
