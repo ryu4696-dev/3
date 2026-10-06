@@ -139,9 +139,10 @@ class SalesTableView(context: Context) : ScrollView(context) {
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(9),dp(8),dp(9),dp(8))
         background = rounded(if (alt) Color.rgb(248,250,252) else Color.WHITE, Color.rgb(232,236,242))
-        addView(label(monthLabel(month), 11.5f, Color.rgb(55,65,81), true), LinearLayout.LayoutParams(dp(62),-2))
+        addView(label(monthLabel(month), 11.5f, Color.rgb(55,65,81), true), LinearLayout.LayoutParams(dp(52),-2))
         addView(label("¥" + fmt.format(metrics.amount), 11.5f, Color.rgb(15,105,76), true).apply { gravity=Gravity.END }, LinearLayout.LayoutParams(0,-2,1f))
         addView(label(fmt.format(metrics.sqm) + "㎡", 11.5f, Color.rgb(52,81,160), false).apply { gravity=Gravity.END }, LinearLayout.LayoutParams(0,-2,1f))
+        addView(label(fmt.format(metrics.quantity), 11.5f, Color.rgb(71,85,105), false).apply { gravity=Gravity.END }, LinearLayout.LayoutParams(0,-2,1f))
     }
 
     private fun metric(name: String, value: String, color: Int, fill: Int) = LinearLayout(context).apply {
