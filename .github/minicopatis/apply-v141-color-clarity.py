@@ -7,27 +7,27 @@ s = p.read_text()
 # Selected controls: use the same muted green accent as expanded cards.
 s = s.replace(
     'setTextColor(if (item == selectedCategory) Color.rgb(52, 81, 200) else Color.rgb(89, 97, 116))',
-    'setTextColor(if (item == selectedCategory) Color.rgb(15, 91, 70) else Color.rgb(89, 97, 116))'
+    'setTextColor(if (item == selectedCategory) Color.WHITE else Color.rgb(89, 97, 116))'
 )
 s = s.replace(
     'background = rounded(if (item == selectedCategory) Color.WHITE else Color.TRANSPARENT)',
-    'background = rounded(if (item == selectedCategory) Color.rgb(236, 247, 242) else Color.TRANSPARENT)'
+    'background = rounded(if (item == selectedCategory) Color.rgb(15, 91, 70) else Color.TRANSPARENT)'
 )
 s = s.replace(
     'setTextColor(if (option == selected) Color.rgb(52, 81, 200) else Color.rgb(89, 97, 116))',
-    'setTextColor(if (option == selected) Color.rgb(15, 91, 70) else Color.rgb(89, 97, 116))'
+    'setTextColor(if (option == selected) Color.WHITE else Color.rgb(89, 97, 116))'
 )
 s = s.replace(
     'background = rounded(if (option == selected) Color.WHITE else Color.TRANSPARENT)',
-    'background = rounded(if (option == selected) Color.rgb(236, 247, 242) else Color.TRANSPARENT)'
+    'background = rounded(if (option == selected) Color.rgb(15, 91, 70) else Color.TRANSPARENT)'
 )
 s = s.replace(
     'setTextColor(if (sortGoodFirst == goodFirst) Color.rgb(52, 81, 200) else Color.rgb(89, 97, 116))',
-    'setTextColor(if (sortGoodFirst == goodFirst) Color.rgb(15, 91, 70) else Color.rgb(89, 97, 116))'
+    'setTextColor(if (sortGoodFirst == goodFirst) Color.WHITE else Color.rgb(89, 97, 116))'
 )
 s = s.replace(
     'background = rounded(if (sortGoodFirst == goodFirst) Color.WHITE else Color.TRANSPARENT)',
-    'background = rounded(if (sortGoodFirst == goodFirst) Color.rgb(236, 247, 242) else Color.TRANSPARENT)'
+    'background = rounded(if (sortGoodFirst == goodFirst) Color.rgb(15, 91, 70) else Color.TRANSPARENT)'
 )
 
 # Achievement helpers: color is semantic, not decorative.
