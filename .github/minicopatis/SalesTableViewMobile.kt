@@ -47,13 +47,7 @@ class SalesTableView(context: Context) : ScrollView(context) {
 
     private fun rebuild() {
         content.removeAllViews()
-        if (products.isEmpty()) {
-            content.addView(label("取引先と期間を指定すると商品別実績が表示されます", 13.5f, Color.rgb(100,116,139), false).apply {
-                gravity = Gravity.CENTER
-                setPadding(dp(12), dp(42), dp(12), dp(42))
-            })
-            return
-        }
+        if (products.isEmpty()) return
 
         content.addView(summaryCard(), LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(10) })
         products.forEach { product ->
