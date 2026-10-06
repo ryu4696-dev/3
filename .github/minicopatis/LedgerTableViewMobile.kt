@@ -130,7 +130,7 @@ class LedgerTableView(context: Context) : ScrollView(context) {
             return when {
                 raw.contains("SKS200") -> "SKS200"
                 raw.contains("SKS180") -> "SKS180"
-                raw.contains("MM180") || Regex("(?<![A-Z])180(?!\\d)").containsMatchIn(raw) -> "180"
+                raw.contains("MM180") || raw.contains("180") -> "180"
                 raw.contains("160") -> "160"
                 else -> ""
             }
