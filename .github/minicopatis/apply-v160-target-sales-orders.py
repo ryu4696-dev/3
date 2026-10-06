@@ -196,7 +196,7 @@ old = '''                box.addView(card().apply {
                         cornerRadius=16f
                         setStroke(dp(1), Color.rgb(211,224,241))
                     }
-                    addView(label("$date　${companies.size}社・$dayCount件",15f,Color.rgb(42,67,108),true))
+                    addView(label("$date　${companies.size}社・${dayCount}件",15f,Color.rgb(42,67,108),true))
                 },margin())
 '''
 new = '''                val dayAmount=companies.values.flatten().sumOf { it.second.amount }
@@ -216,7 +216,7 @@ new = '''                val dayAmount=companies.values.flatten().sumOf { it.sec
                         label(date,15f,Color.rgb(42,67,108),true),
                         LinearLayout.LayoutParams(0,-2,1f)
                     )
-                    head.addView(label("${companies.size}社・$dayCount件",11f,Color.rgb(78,94,120),true))
+                    head.addView(label("${companies.size}社・${dayCount}件",11f,Color.rgb(78,94,120),true))
                     addView(head)
 
                     val metrics=LinearLayout(this@SalesDashboardActivity).apply {
