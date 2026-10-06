@@ -1,5 +1,5 @@
 name: Inspect Quote Source
-# inspect-run-v2
+# inspect-run-v3
 
 on:
   workflow_dispatch:
@@ -42,3 +42,8 @@ jobs:
         with:
           name: quote-mainactivity-source
           path: /tmp/out/sources/jp/co/kobayashi/cardboardquote/MainActivity.java
+      - name: Upload quote source package
+        uses: actions/upload-artifact@v4
+        with:
+          name: quote-source-package
+          path: /tmp/out/sources/jp/co/kobayashi/cardboardquote
