@@ -26,9 +26,9 @@ entries = '''        <activity
             android:exported="false" />
 '''
 if 'android:name=".QuoteWorkspaceActivity"' not in m:
-    marker = '        <activity\n            android:name=".MainActivity"'
+    marker = '    </application>'
     if marker not in m:
-        raise SystemExit("manifest main activity anchor missing")
+        raise SystemExit("manifest application end missing")
     m = m.replace(marker, entries + marker, 1)
 manifest.write_text(m)
 
