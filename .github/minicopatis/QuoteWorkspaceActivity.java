@@ -32,12 +32,12 @@ import java.util.List;
 import java.util.Locale;
 
 public class QuoteWorkspaceActivity extends Activity {
-    private final int GREEN = Color.rgb(15, 91, 70);
-    private final int GREEN_DARK = Color.rgb(10, 74, 56);
-    private final int TEXT = Color.rgb(20, 28, 43);
-    private final int SUB = Color.rgb(94, 104, 120);
-    private final int BG = Color.rgb(248, 247, 243);
-    private final int BORDER = Color.rgb(215, 220, 226);
+    private final int GREEN = Color.rgb(40, 101, 73);
+    private final int GREEN_DARK = Color.rgb(40, 101, 73);
+    private final int TEXT = Color.rgb(31, 37, 33);
+    private final int SUB = Color.rgb(103, 109, 105);
+    private final int BG = Color.rgb(247, 243, 234);
+    private final int BORDER = Color.rgb(207, 211, 206);
 
     private EditText lengthEdit, widthEdit, depthEdit, processEdit;
     private TextView materialButton, unitText, detailText, editBanner;
@@ -124,29 +124,29 @@ public class QuoteWorkspaceActivity extends Activity {
         root.addView(dims);
 
         root.addView(section("材質"), lp(-1, -2, 16, 6));
-        materialButton = label(displayMaterial(selectedMaterial.name) + "   ▼", 16.5f, TEXT, false);
+        materialButton = label(displayMaterial(selectedMaterial.name) + "   ▼", 17f, TEXT, false);
         materialButton.setGravity(Gravity.CENTER_VERTICAL);
         materialButton.setPadding(dp(15), 0, dp(15), 0);
         materialButton.setBackground(fieldBg());
         materialButton.setOnClickListener(v -> showMaterialDialog());
-        root.addView(materialButton, new LinearLayout.LayoutParams(-1, dp(58)));
+        root.addView(materialButton, new LinearLayout.LayoutParams(-1, dp(60)));
 
         root.addView(section("加工賃（円 / ㎡）"), lp(-1, -2, 16, 6));
         processEdit = numEdit("加工賃", true);
         processEdit.setText("10");
-        root.addView(processEdit, new LinearLayout.LayoutParams(-1, dp(58)));
+        root.addView(processEdit, new LinearLayout.LayoutParams(-1, dp(60)));
 
         LinearLayout priceCard = card();
-        priceCard.addView(label("見積単価", 14f, SUB, true));
-        unitText = label("— 円", 35f, GREEN_DARK, true);
+        priceCard.addView(label("見積単価", 15f, SUB, true));
+        unitText = label("— 円", 36f, GREEN_DARK, true);
         unitText.setPadding(0, dp(4), 0, 0);
         priceCard.addView(unitText);
         root.addView(priceCard, lp(-1, -2, 20, 0));
 
         detailCard = card();
         detailCard.setVisibility(View.GONE);
-        detailCard.addView(label("計算詳細", 14f, SUB, true));
-        detailText = label("", 13f, TEXT, false);
+        detailCard.addView(label("計算詳細", 15f, SUB, true));
+        detailText = label("", 14f, TEXT, false);
         detailText.setLineSpacing(dp(2), 1.12f);
         detailText.setPadding(0, dp(9), 0, 0);
         detailCard.addView(detailText);
@@ -154,13 +154,13 @@ public class QuoteWorkspaceActivity extends Activity {
 
         TextView calc = action("計算する", true);
         calc.setOnClickListener(v -> calculateAndRender(true));
-        root.addView(calc, lp(-1, dp(54), 14, 0));
+        root.addView(calc, lp(-1, dp(58), 14, 0));
 
         TextView show = action("金額を見せる", false);
         show.setOnClickListener(v -> {
             if (calculateAndRender(true)) showResult();
         });
-        root.addView(show, lp(-1, dp(54), 8, 0));
+        root.addView(show, lp(-1, dp(58), 8, 0));
 
         saveArea = new LinearLayout(this);
         saveArea.setOrientation(LinearLayout.VERTICAL);
@@ -193,22 +193,17 @@ public class QuoteWorkspaceActivity extends Activity {
         TextView title = label("簡易見積", 25f, TEXT, true);
         row.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
 
-        TextView history = label("保存一覧", 13f, GREEN_DARK, true);
-        history.setGravity(Gravity.CENTER);
-        history.setPadding(dp(10), 0, dp(10), 0);
-        history.setBackground(round(Color.rgb(234,246,239), Color.rgb(192,220,207), 10));
-        history.setOnClickListener(v -> startActivity(new Intent(this, QuoteHistoryActivity.class)));
-        row.addView(history, new LinearLayout.LayoutParams(dp(82), dp(38)));
+
         return row;
     }
 
     private void renderFlutes() {
         fluteRow.removeAllViews();
-        String[] labels = {"AF", "BF", "CF", "WF"};
+        String[] labels = {"AF", "BF", "WF"};
         for (int i = 0; i < labels.length; i++) {
             String f = labels[i];
             boolean selected = f.equals(selectedFlute);
-            TextView v = label(f, 17f, selected ? Color.WHITE : GREEN_DARK, true);
+            TextView v = label(f, 18f, selected ? Color.WHITE : GREEN_DARK, true);
             v.setGravity(Gravity.CENTER);
             v.setBackground(round(selected ? GREEN_DARK : Color.WHITE, selected ? GREEN_DARK : BORDER, 13));
             v.setOnClickListener(x -> {
@@ -216,7 +211,7 @@ public class QuoteWorkspaceActivity extends Activity {
                 renderFlutes();
                 invalidateCalc();
             });
-            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(54), 1f);
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(58), 1f);
             if (i > 0) p.leftMargin = dp(7);
             fluteRow.addView(v, p);
         }
@@ -256,7 +251,7 @@ public class QuoteWorkspaceActivity extends Activity {
         editingFolderId = q.folderId;
         editingName = launchAsNew ? q.name + " コピー" : q.name;
 
-        selectedFlute = q.flute == null || q.flute.isEmpty() ? "AF" : q.flute;
+        selectedFlute = ("BF".equals(q.flute) || "WF".equals(q.flute)) ? q.flute : "AF";
         MaterialInfo m = findMaterial(q.material);
         if (m != null) selectedMaterial = m;
 
@@ -554,11 +549,12 @@ public class QuoteWorkspaceActivity extends Activity {
     private EditText numEdit(String hint, boolean decimal) {
         EditText e = new EditText(this);
         e.setHint(hint);
-        e.setTextSize(16f);
+        e.setTextSize(17f);
         e.setSingleLine(true);
-        e.setGravity(Gravity.CENTER);
+        e.setGravity(Gravity.CENTER_VERTICAL);
+        e.setPadding(dp(14), 0, dp(14), 0);
         e.setTextColor(TEXT);
-        e.setHintTextColor(Color.rgb(145,150,158));
+        e.setHintTextColor(SUB);
         e.setInputType(decimal
                 ? InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL
                 : InputType.TYPE_CLASS_NUMBER);
@@ -579,7 +575,8 @@ public class QuoteWorkspaceActivity extends Activity {
     private TextView action(String t, boolean primary) {
         TextView v = label(t, 15f, primary ? Color.WHITE : GREEN_DARK, true);
         v.setGravity(Gravity.CENTER);
-        v.setBackground(round(primary ? GREEN_DARK : Color.WHITE, primary ? GREEN_DARK : Color.rgb(174,204,191), 12));
+        v.setTextSize(18f);
+        v.setBackground(round(primary ? GREEN_DARK : Color.WHITE, GREEN_DARK, 15));
         return v;
     }
 
@@ -610,7 +607,7 @@ public class QuoteWorkspaceActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams weight(float weight, int left) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(58), weight);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(60), weight);
         p.leftMargin = dp(left);
         return p;
     }
