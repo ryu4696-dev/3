@@ -128,9 +128,9 @@ class LedgerTableView(context: Context) : ScrollView(context) {
         fun rate(abc: Double, wfRate: Double) = if (wf) wfRate else abc
         fun mediumCode(): String {
             return when {
-                raw.contains("SKS200") -> "SKS200"
-                raw.contains("SKS180") -> "SKS180"
-                raw.contains("MM180") || raw.contains("180") -> "180"
+                raw.contains("SKS200") || raw.contains("MM200") -> "SKS200"
+                raw.contains("SKS180") || raw.contains("MM180") -> "SKS180"
+                raw.contains("180") -> "180"
                 raw.contains("160") -> "160"
                 else -> ""
             }
@@ -138,7 +138,7 @@ class LedgerTableView(context: Context) : ScrollView(context) {
         val medium = mediumCode()
 
         val outer = when {
-            raw.startsWith("OPB6") -> "OPB6"
+            raw.startsWith("OPB6") || raw.startsWith("OPC6") -> "OPB6"
             raw.startsWith("OPC5") -> "OPC5"
             raw.startsWith("K7") -> "K7"
             raw.startsWith("K6") -> "K6"
@@ -148,7 +148,7 @@ class LedgerTableView(context: Context) : ScrollView(context) {
         }
 
         val inner = when {
-            raw.contains("/OPB6") -> "OPB6"
+            raw.contains("/OPB6") || raw.contains("/OPC6") -> "OPB6"
             raw.contains("/OPC5") -> "OPC5"
             raw.contains("/K7") -> "K7"
             raw.contains("/K6") -> "K6"
