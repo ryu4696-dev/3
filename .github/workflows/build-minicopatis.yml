@@ -1,5 +1,5 @@
 name: Build MiniCoPaTis APK
-# Rebuild after v1.8.0 color hierarchy and achievement colors
+# Rebuild after v1.9.0 color hierarchy and achievement colors
 
 on:
   workflow_dispatch:
@@ -212,6 +212,10 @@ jobs:
           python3 .github/minicopatis/apply-v160-target-sales-orders.py
           python3 .github/minicopatis/apply-v170-unified-sales-picker-orders.py
           python3 .github/minicopatis/apply-v180-sales-scope-ledger.py
+          cp .github/minicopatis/QuoteHistoryStore.java ledgerapp/app/src/main/java/jp/co/ichika/salesledger/QuoteHistoryStore.java
+          cp .github/minicopatis/QuoteWorkspaceActivity.java ledgerapp/app/src/main/java/jp/co/ichika/salesledger/QuoteWorkspaceActivity.java
+          cp .github/minicopatis/QuoteHistoryActivity.java ledgerapp/app/src/main/java/jp/co/ichika/salesledger/QuoteHistoryActivity.java
+          python3 .github/minicopatis/apply-v190-quote-history.py
 
       - name: Upload source snapshot
         uses: actions/upload-artifact@v4
@@ -307,17 +311,17 @@ jobs:
             keytool -genkeypair -v               -keystore "$HOME/.android/debug.keystore"               -storepass android               -alias androiddebugkey               -keypass android               -keyalg RSA               -keysize 2048               -validity 10000               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-key-alias androiddebugkey             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v1.8.0.apk"             /tmp/minicopatis-aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-key-alias androiddebugkey             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v1.9.0.apk"             /tmp/minicopatis-aligned.apk
 
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose             "$GITHUB_WORKSPACE/MiniCoPaTis-v1.8.0.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose             "$GITHUB_WORKSPACE/MiniCoPaTis-v1.9.0.apk"
 
-          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v1.8.0.apk" | grep -E 'classes4.dex|app_icon'
+          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v1.9.0.apk" | grep -E 'classes4.dex|app_icon'
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MiniCoPaTis-v1.8.0
-          path: MiniCoPaTis-v1.8.0.apk
+          name: MiniCoPaTis-v1.9.0
+          path: MiniCoPaTis-v1.9.0.apk
           retention-days: 30
 
       - name: Record APK build run ID
