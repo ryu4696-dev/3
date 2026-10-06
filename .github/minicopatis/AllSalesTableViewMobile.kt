@@ -47,13 +47,7 @@ class AllSalesTableView(context: Context) : ScrollView(context) {
 
     private fun rebuild() {
         content.removeAllViews()
-        if (sections.isEmpty()) {
-            content.addView(label("販売目標対象の売上データがありません", 13.5f, Color.rgb(100,116,139), false).apply {
-                gravity = Gravity.CENTER
-                setPadding(dp(12), dp(42), dp(12), dp(42))
-            })
-            return
-        }
+        if (sections.isEmpty()) return
 
         val total = sections.fold(SalesMetrics()) { acc, section ->
             acc + section.products.fold(SalesMetrics()) { pacc, p -> pacc + totalOf(p) }
