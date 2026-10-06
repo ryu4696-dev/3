@@ -14,7 +14,7 @@ s=s.replace(
             Typeface.NORMAL
         ).apply { setPadding(dp(3), dp(7), 0, 0) }''',
 '''        salesCountView = text(
-            if (selectedSalesCustomer == null) "" else "販売目標対象のみ",
+            "",
             11.5f,
             Color.rgb(100, 116, 139),
             Typeface.NORMAL
