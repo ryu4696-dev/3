@@ -79,17 +79,131 @@ class LedgerTableView(context: Context) : ScrollView(context) {
             LinearLayout.LayoutParams(0, -2, 1f))
         card.addView(infoRow)
 
-        val metrics = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(10), 0, dp(8)) }
-        metrics.addView(metric("平米", if (p.sqm > 0.000001) number.format(p.sqm) + "㎡" else "—", Color.rgb(52,81,160)), LinearLayout.LayoutParams(0,-2,1f))
-        metrics.addView(metric("売価", if (p.price != 0.0) "¥" + number.format(p.price) else "—", Color.rgb(15,105,76)), LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin=dp(6) })
-        metrics.addView(metric("平米売価", if (p.sqmPrice > 0.000001) "¥" + number.format(p.sqmPrice) else "—", Color.rgb(15,105,76)), LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin=dp(6) })
-        card.addView(metrics)
+        val metricsTop = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(10), 0, 0) }
+        metricsTop.addView(metric("平米", if (p.sqm > 0.000001) number.format(p.sqm) + "㎡" else "—", Color.rgb(52,81,160)), LinearLayout.LayoutParams(0,-2,1f))
+        metricsTop.addView(metric("売価", if (p.price != 0.0) "¥" + number.format(p.price) else "—", Color.rgb(15,105,76)), LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin=dp(6) })
+        card.addView(metricsTop)
+
+        val processRate = processRatePerSqm(p)
+        val metricsBottom = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(6), 0, dp(8)) }
+        metricsBottom.addView(
+            metric("平米単価", if (p.sqmPrice > 0.000001) "¥" + number.format(p.sqmPrice) else "—", Color.rgb(15,105,76)),
+            LinearLayout.LayoutParams(0,-2,1f)
+        )
+        metricsBottom.addView(
+            metric(
+                "平米加工賃",
+                processRate?.let { "¥" + number.format(it) } ?: "—",
+                if (processRate != null && processRate < 0.0) Color.rgb(190,58,58) else Color.rgb(181,107,19)
+            ),
+            LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin=dp(6) }
+        )
+        card.addView(metricsBottom)
 
         val footer = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(2), 0, 0) }
         footer.addView(label("工程　" + p.process.ifBlank { "—" }, 11.5f, Color.rgb(71,85,105), false).apply { maxLines=2 })
         footer.addView(label("最終納品　" + p.lastDeliveryDate.ifBlank { "—" }, 11.5f, Color.rgb(71,85,105), false).apply { setPadding(0,dp(4),0,0) })
         card.addView(footer)
         return card
+    }
+
+    private fun processRatePerSqm(p: ProductSummary): Double? {
+        if (p.sqmPrice <= 0.000001) return null
+        val materialRate = quoteMaterialRate(p.material) ?: return null
+        return p.sqmPrice - materialRate
+    }
+
+    // Same material-rate table used by the embedded quick quote.
+    // Quick quote formula: unit price = ceil((material rate + process rate) * area per piece).
+    // Therefore the ledger-side reverse estimate is sqm unit price - material rate.
+    private fun quoteMaterialRate(rawMaterial: String): Double? {
+        val raw = rawMaterial.uppercase()
+            .replace(" ", "")
+            .replace("　", "")
+            .replace("×", "X")
+            .replace("・", "")
+        if (raw.isBlank()) return null
+        val wf = raw.contains("W")
+
+        fun rate(abc: Double, wfRate: Double) = if (wf) wfRate else abc
+        fun mediumCode(): String {
+            return when {
+                raw.contains("SKS200") -> "SKS200"
+                raw.contains("SKS180") -> "SKS180"
+                raw.contains("MM180") || Regex("(?<![A-Z])180(?!\\d)").containsMatchIn(raw) -> "180"
+                raw.contains("160") -> "160"
+                else -> ""
+            }
+        }
+        val medium = mediumCode()
+
+        val outer = when {
+            raw.startsWith("OPB6") -> "OPB6"
+            raw.startsWith("OPC5") -> "OPC5"
+            raw.startsWith("K7") -> "K7"
+            raw.startsWith("K6") -> "K6"
+            raw.startsWith("K5") -> "K5"
+            raw.startsWith("C5") -> "C5"
+            else -> return null
+        }
+
+        val inner = when {
+            raw.contains("/OPB6") -> "OPB6"
+            raw.contains("/OPC5") -> "OPC5"
+            raw.contains("/K7") -> "K7"
+            raw.contains("/K6") -> "K6"
+            raw.contains("/K5") -> "K5"
+            raw.contains("/C5") -> "C5"
+            outer == "OPB6" -> "K6"
+            outer == "OPC5" -> "C5"
+            else -> outer
+        }
+
+        return when ("$outer/$inner/$medium") {
+            "C5/C5/" -> rate(65.0, 98.0)
+            "C5/C5/160" -> rate(69.0, 102.0)
+            "C5/C5/180" -> rate(72.5, 105.5)
+            "C5/C5/SKS180" -> rate(77.0, 110.0)
+            "C5/C5/SKS200" -> rate(80.0, 113.0)
+
+            "OPC5/C5/" -> rate(70.0, 103.0)
+            "OPC5/C5/160" -> rate(74.0, 107.0)
+            "OPC5/C5/180" -> rate(77.5, 110.5)
+            "OPC5/C5/SKS180" -> rate(82.0, 115.0)
+            "OPC5/OPC5/" -> rate(75.0, 108.0)
+            "OPC5/OPC5/160" -> rate(79.0, 112.0)
+            "OPC5/OPC5/SKS180" -> rate(87.0, 120.0)
+
+            "K5/K5/" -> rate(70.0, 103.0)
+            "K5/K5/160" -> rate(74.0, 107.0)
+            "K5/K5/180" -> rate(77.5, 110.5)
+            "K5/K5/SKS180" -> rate(82.0, 115.0)
+            "K5/K5/SKS200" -> rate(85.0, 118.0)
+
+            "K6/K6/" -> rate(76.0, 109.0)
+            "K6/K6/160" -> rate(80.0, 113.0)
+            "K6/K6/180" -> rate(83.5, 116.5)
+            "K6/K6/SKS180" -> rate(88.0, 121.0)
+            "K6/K6/SKS200" -> rate(91.0, 124.0)
+
+            "OPB6/K6/" -> rate(81.0, 114.0)
+            "OPB6/K6/160" -> rate(85.0, 118.0)
+            "OPB6/K6/180" -> rate(88.5, 121.5)
+            "OPB6/K6/SKS180" -> rate(93.0, 126.0)
+            "OPB6/K6/SKS200" -> rate(96.0, 129.0)
+            "OPB6/OPB6/" -> rate(86.0, 119.0)
+            "OPB6/OPB6/160" -> rate(90.0, 123.0)
+            "OPB6/OPB6/180" -> rate(93.5, 126.5)
+            "OPB6/OPB6/SKS180" -> rate(98.0, 131.0)
+            "OPB6/OPB6/SKS200" -> rate(101.0, 134.0)
+
+            "K7/K7/" -> rate(87.0, 120.0)
+            "K7/K7/160" -> rate(91.0, 124.0)
+            "K7/K7/180" -> rate(94.5, 127.5)
+            "K7/K7/SKS180" -> rate(99.0, 132.0)
+            "K7/K7/SKS200" -> rate(102.0, 135.0)
+            else -> null
+        }
     }
 
     private fun metric(name: String, value: String, color: Int) = LinearLayout(context).apply {
