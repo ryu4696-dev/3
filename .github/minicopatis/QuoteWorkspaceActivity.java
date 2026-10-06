@@ -133,7 +133,6 @@ public class QuoteWorkspaceActivity extends Activity {
 
         root.addView(section("加工賃（円 / ㎡）"), lp(-1, -2, 16, 6));
         processEdit = numEdit("加工賃", true);
-        processEdit.setText("10");
         root.addView(processEdit, new LinearLayout.LayoutParams(-1, dp(60)));
 
         LinearLayout priceCard = card();
