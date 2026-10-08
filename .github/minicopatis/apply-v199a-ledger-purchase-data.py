@@ -127,36 +127,9 @@ patch("CsvImporter.kt",
         val purchaseTierAdjustments: List<TierAdjustment>
     ) {''')
 
-patch("CsvImporter.kt",
-'''        fun adjustmentAt(quantity: Int): Double {
-            if (tierAdjustments.isEmpty()) return 0.0
-            for (tier in tierAdjustments) {
-                if (quantity <= tier.quantity) return tier.delta else break
-            }
-            return tierAdjustments.last().delta
-        }''',
-'''        fun adjustmentAt(quantity: Int): Double {
-            if (tierAdjustments.isEmpty()) return 0.0
-            for (tier in tierAdjustments) {
-                if (quantity <= tier.quantity) return tier.delta
-            }
-            return tierAdjustments.last().delta
-        }
-
-        fun purchaseAdjustmentAt(quantity: Int): Double {
-            if (purchaseTierAdjustments.isEmpty()) return 0.0
-            for (tier in purchaseTierAdjustments) {
-                if (quantity <= tier.quantity) return tier.delta
-            }
-            return purchaseTierAdjustments.last().delta
-        }''')
-
-# The current source already has the corrected sell adjustment loop; if the older
-# exact block above was not present, patch only by inserting purchase helper.
 p = root / "CsvImporter.kt"
 s = p.read_text()
-if "fun purchaseAdjustmentAt(quantity: Int)" not in s:
-    anchor = '''        fun adjustmentAt(quantity: Int): Double {
+anchor = '''        fun adjustmentAt(quantity: Int): Double {
             if (tierAdjustments.isEmpty()) return 0.0
             for (tier in tierAdjustments) {
                 if (quantity <= tier.quantity) return tier.delta
@@ -164,8 +137,9 @@ if "fun purchaseAdjustmentAt(quantity: Int)" not in s:
             return tierAdjustments.last().delta
         }
 '''
-    if anchor not in s:
-        raise SystemExit("CsvImporter.kt: adjustment helper anchor missing")
+if anchor not in s:
+    raise SystemExit("CsvImporter.kt: adjustment helper anchor missing")
+if "fun purchaseAdjustmentAt(quantity: Int)" not in s:
     s = s.replace(anchor, anchor + '''
         fun purchaseAdjustmentAt(quantity: Int): Double {
             if (purchaseTierAdjustments.isEmpty()) return 0.0
@@ -175,7 +149,7 @@ if "fun purchaseAdjustmentAt(quantity: Int)" not in s:
             return purchaseTierAdjustments.last().delta
         }
 ''', 1)
-    p.write_text(s)
+p.write_text(s)
 
 # ProductBuilder.
 patch("CsvImporter.kt",
