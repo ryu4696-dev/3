@@ -144,6 +144,7 @@ s=s.replace(
 
 p.write_text(s)
 
-# Apply v1.9.9 ledger purchase-price / per-piece processing-fee patch.
+# Apply v1.9.9 ledger purchase-price / per-piece processing-fee patches.
 import runpy
-runpy.run_path(".github/minicopatis/apply-v199-ledger-purchase-processing.py", run_name="__main__")
+runpy.run_path(".github/minicopatis/apply-v199a-ledger-purchase-data.py", run_name="__main__")
+runpy.run_path(".github/minicopatis/apply-v199b-ledger-purchase-ui.py", run_name="__main__")
