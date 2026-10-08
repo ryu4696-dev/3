@@ -13,9 +13,9 @@ new = """                SalesMetrics(
                     acc.costKnown && v.costKnown
                 )
 """
-if s.count(old) < 3:
-    raise SystemExit("sales export aggregate anchors missing")
-s = s.replace(old, new, 3)
+if old not in s:
+    raise SystemExit("sales export aggregate anchor missing")
+s = s.replace(old, new)
 
 old = """            width(5, 16.0); width(6, 14.0); width(7, 14.0)
             row(ExcelExport.text("売上分析", ExcelExport.TITLE))
