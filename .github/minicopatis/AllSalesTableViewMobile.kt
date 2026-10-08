@@ -141,6 +141,11 @@ class AllSalesTableView(context: Context) : ScrollView(context) {
             LinearLayout.LayoutParams(0,-2,1f)
         )
         box.addView(productMetrics)
+        val gp = if (total.costKnown) "粗利 ¥" + fmt.format(total.grossProfit) else "粗利 —"
+        val rate = total.grossRate?.let { java.text.DecimalFormat("0.0%").format(it) } ?: "—"
+        box.addView(label(gp + "　　粗利率 " + rate, 10.8f,
+            if (total.costKnown && total.grossProfit < 0) Color.rgb(190,58,58) else Color.rgb(15,105,76), true
+        ).apply { setPadding(0,dp(6),0,0) })
 
         if (open) {
             months.forEachIndexed { index, month ->
@@ -156,11 +161,25 @@ class AllSalesTableView(context: Context) : ScrollView(context) {
     }
 
     private fun metricRow(metrics: SalesMetrics): LinearLayout = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        setPadding(0,dp(9),0,0)
-        addView(metric("金額", "¥" + fmt.format(metrics.amount), Color.rgb(15,105,76), Color.rgb(228,246,237), Color.rgb(184,224,205)), LinearLayout.LayoutParams(0,-2,1f))
-        addView(metric("平米", fmt.format(metrics.sqm) + "㎡", Color.rgb(52,81,160), Color.rgb(232,239,252), Color.rgb(196,210,239)), LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin=dp(6) })
-        addView(metric("数量", fmt.format(metrics.quantity), Color.rgb(71,85,105), Color.rgb(241,243,246), Color.rgb(214,219,227)), LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin=dp(6) })
+        orientation = LinearLayout.VERTICAL
+        val top = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0,dp(9),0,0)
+            addView(metric("金額", "¥" + fmt.format(metrics.amount), Color.rgb(15,105,76), Color.rgb(228,246,237), Color.rgb(184,224,205)), LinearLayout.LayoutParams(0,-2,1f))
+            addView(metric("平米", fmt.format(metrics.sqm) + "㎡", Color.rgb(52,81,160), Color.rgb(232,239,252), Color.rgb(196,210,239)), LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin=dp(6) })
+            addView(metric("数量", fmt.format(metrics.quantity), Color.rgb(71,85,105), Color.rgb(241,243,246), Color.rgb(214,219,227)), LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin=dp(6) })
+        }
+        addView(top)
+        val gp = if (metrics.costKnown) "¥" + fmt.format(metrics.grossProfit) else "—"
+        val rate = metrics.grossRate?.let { java.text.DecimalFormat("0.0%").format(it) } ?: "—"
+        val gpColor = if (metrics.costKnown && metrics.grossProfit < 0) Color.rgb(190,58,58) else Color.rgb(15,105,76)
+        val profit = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0,dp(6),0,0)
+            addView(metric("粗利", gp, gpColor, Color.rgb(228,246,237), Color.rgb(184,224,205)), LinearLayout.LayoutParams(0,-2,1f))
+            addView(metric("粗利率", rate, gpColor, Color.rgb(228,246,237), Color.rgb(184,224,205)), LinearLayout.LayoutParams(0,-2,1f).apply { leftMargin=dp(6) })
+        }
+        addView(profit)
     }
 
     private fun metric(name: String, value: String, color: Int, fill: Int, stroke: Int) = LinearLayout(context).apply {
@@ -172,14 +191,23 @@ class AllSalesTableView(context: Context) : ScrollView(context) {
     }
 
     private fun monthRow(month: String, metrics: SalesMetrics, alt: Boolean): LinearLayout = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
+        orientation = LinearLayout.VERTICAL
         setPadding(dp(9),dp(8),dp(9),dp(8))
         background = rounded(if (alt) Color.rgb(245,248,251) else Color.WHITE, Color.rgb(218,224,233))
-        addView(label(monthLabel(month), 11f, Color.rgb(55,65,81), true), LinearLayout.LayoutParams(dp(52),-2))
-        addView(label("¥" + fmt.format(metrics.amount), 11f, Color.rgb(15,105,76), true).apply { gravity=Gravity.END }, LinearLayout.LayoutParams(0,-2,1f))
-        addView(label(fmt.format(metrics.sqm) + "㎡", 11f, Color.rgb(52,81,160), false).apply { gravity=Gravity.END }, LinearLayout.LayoutParams(0,-2,1f))
-        addView(label(fmt.format(metrics.quantity), 11f, Color.rgb(71,85,105), false).apply { gravity=Gravity.END }, LinearLayout.LayoutParams(0,-2,1f))
+        val top = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(label(monthLabel(month), 11f, Color.rgb(55,65,81), true), LinearLayout.LayoutParams(dp(52),-2))
+            addView(label("¥" + fmt.format(metrics.amount), 11f, Color.rgb(15,105,76), true).apply { gravity=Gravity.END }, LinearLayout.LayoutParams(0,-2,1f))
+            addView(label(fmt.format(metrics.sqm) + "㎡", 11f, Color.rgb(52,81,160), false).apply { gravity=Gravity.END }, LinearLayout.LayoutParams(0,-2,1f))
+            addView(label(fmt.format(metrics.quantity), 11f, Color.rgb(71,85,105), false).apply { gravity=Gravity.END }, LinearLayout.LayoutParams(0,-2,1f))
+        }
+        addView(top)
+        val gp = if (metrics.costKnown) "粗利 ¥" + fmt.format(metrics.grossProfit) else "粗利 —"
+        val rate = metrics.grossRate?.let { java.text.DecimalFormat("0.0%").format(it) } ?: "—"
+        addView(label(gp + "　　粗利率 " + rate, 10.3f,
+            if (metrics.costKnown && metrics.grossProfit < 0) Color.rgb(190,58,58) else Color.rgb(15,105,76), true
+        ).apply { setPadding(dp(52),dp(5),0,0) })
     }
 
     private fun totalOf(product: SalesProductMonthly): SalesMetrics =
@@ -188,7 +216,9 @@ class AllSalesTableView(context: Context) : ScrollView(context) {
     private operator fun SalesMetrics.plus(other: SalesMetrics) = SalesMetrics(
         amount + other.amount,
         quantity + other.quantity,
-        sqm + other.sqm
+        sqm + other.sqm,
+        cost + other.cost,
+        costKnown && other.costKnown
     )
 
     private fun monthLabel(month: String): String {
