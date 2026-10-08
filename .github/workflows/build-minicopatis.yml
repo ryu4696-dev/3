@@ -238,6 +238,7 @@ jobs:
           path: |
             ledgerapp/app/src/main/java/jp/co/ichika/salesledger/MainActivity.kt
             ledgerapp/app/src/main/java/jp/co/ichika/salesledger/CsvImporter.kt
+            ledgerapp/app/src/main/java/jp/co/ichika/salesledger/SalesCsvImporter.kt
             ledgerapp/app/src/main/java/jp/co/ichika/salesledger/SalesTableView.kt
             ledgerapp/app/src/main/java/jp/co/ichika/salesledger/LedgerTableView.kt
             ledgerapp/app/src/main/java/jp/co/ichika/salesledger/DataRepository.kt
