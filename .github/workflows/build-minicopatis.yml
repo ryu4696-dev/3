@@ -1,5 +1,5 @@
 name: Build MiniCoPaTis APK
-# Rebuild after v1.9.7 color hierarchy and achievement colors
+# Stable signing enabled; verification rebuild
 
 on:
   workflow_dispatch:
