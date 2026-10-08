@@ -35,8 +35,8 @@ object ExcelExport {
         val widths = linkedMapOf<Int, Double>()
         val merges = mutableListOf<Merge>()
 
-        fun row(vararg cells: Cell) { rows += cells.toList() }
-        fun blank() { rows += emptyList() }
+        fun row(vararg cells: Cell) { rows.add(cells.toList()) }
+        fun blank() { rows.add(emptyList()) }
         fun width(column1Based: Int, width: Double) { widths[column1Based] = width }
         fun merge(row1: Int, col1: Int, row2: Int, col2: Int) { merges += Merge(row1, col1, row2, col2) }
     }
