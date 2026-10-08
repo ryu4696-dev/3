@@ -1,5 +1,5 @@
 name: Build MiniCoPaTis APK
-# Stable signing enabled; verification rebuild
+# Gross profit: actual purchase cost + raw board material cost
 
 on:
   workflow_dispatch:
@@ -230,6 +230,10 @@ jobs:
           cp .github/minicopatis/ExcelExport.kt ledgerapp/app/src/main/java/jp/co/ichika/salesledger/ExcelExport.kt
           python3 .github/minicopatis/apply-v196-excel-export.py
           python3 .github/minicopatis/apply-v197-stable-signing-version.py
+          cp .github/minicopatis/GrossProfitUtil.kt ledgerapp/app/src/main/java/jp/co/ichika/salesledger/GrossProfitUtil.kt
+          python3 .github/minicopatis/apply-v198-gross-profit-core.py
+          python3 .github/minicopatis/apply-v198-gross-profit-sales-export.py
+          python3 .github/minicopatis/apply-v198-gross-profit-orders.py
 
       - name: Upload source snapshot
         uses: actions/upload-artifact@v4
@@ -328,17 +332,17 @@ jobs:
             keytool -genkeypair -v               -keystore "$KEYSTORE"               -storepass android               -alias minicopatis               -keypass android               -keyalg RSA               -keysize 2048               -validity 10000               -dname "CN=MiniCoPaTis Debug,O=MiniCoPaTis,C=JP"
           fi
 
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$KEYSTORE"             --ks-key-alias minicopatis             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v1.9.7.apk"             /tmp/minicopatis-aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign             --ks "$KEYSTORE"             --ks-key-alias minicopatis             --ks-pass pass:android             --key-pass pass:android             --out "$GITHUB_WORKSPACE/MiniCoPaTis-v1.9.8.apk"             /tmp/minicopatis-aligned.apk
 
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs             "$GITHUB_WORKSPACE/MiniCoPaTis-v1.9.7.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs             "$GITHUB_WORKSPACE/MiniCoPaTis-v1.9.8.apk"
 
-          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v1.9.7.apk" | grep -E 'classes4.dex|app_icon'
+          unzip -l "$GITHUB_WORKSPACE/MiniCoPaTis-v1.9.8.apk" | grep -E 'classes4.dex|app_icon'
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MiniCoPaTis-v1.9.7
-          path: MiniCoPaTis-v1.9.7.apk
+          name: MiniCoPaTis-v1.9.8
+          path: MiniCoPaTis-v1.9.8.apk
           retention-days: 30
 
       - name: Record APK build run ID
