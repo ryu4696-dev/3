@@ -337,14 +337,10 @@ new = """                    put("quantity", record.quantity)
 if old not in s: raise SystemExit("sales insert anchor missing")
 s=s.replace(old,new,1)
 
-# aggregate queries, two occurrences
+# Aggregate queries. The all-company query has an extra sales_customers join,
+# so patch the common SELECT and then insert costing joins after sales_products.
 old = """                   substr(d.sale_date, 1, 7) AS sale_month,
                    SUM(d.amount), SUM(d.quantity), SUM(d.sqm)
-            FROM sales_daily d
-            LEFT JOIN products p
-                   ON p.customer_no = d.customer_no AND p.product_no = d.product_no
-            LEFT JOIN sales_products sp
-                   ON sp.customer_no = d.customer_no AND sp.product_no = d.product_no
 """
 new = """                   substr(d.sale_date, 1, 7) AS sale_month,
                    SUM(d.amount), SUM(d.quantity), SUM(d.sqm),
@@ -364,18 +360,22 @@ new = """                   substr(d.sale_date, 1, 7) AS sale_month,
                            THEN 1 ELSE 0
                        END
                    ) AS unknown_cost_rows
-            FROM sales_daily d
-            LEFT JOIN products p
-                   ON p.customer_no = d.customer_no AND p.product_no = d.product_no
-            LEFT JOIN sales_products sp
+"""
+if s.count(old) < 2: raise SystemExit("aggregate select anchors missing")
+s=s.replace(old,new,2)
+
+old_join = """            LEFT JOIN sales_products sp
+                   ON sp.customer_no = d.customer_no AND sp.product_no = d.product_no
+"""
+new_join = """            LEFT JOIN sales_products sp
                    ON sp.customer_no = d.customer_no AND sp.product_no = d.product_no
             LEFT JOIN product_costs pc
                    ON pc.customer_no = d.customer_no AND pc.product_no = d.product_no
             LEFT JOIN product_costs pg
                    ON pg.customer_no = '*' AND pg.product_no = d.product_no
 """
-if s.count(old) < 2: raise SystemExit("aggregate query anchors missing")
-s=s.replace(old,new,2)
+if s.count(old_join) < 2: raise SystemExit("aggregate join anchors missing")
+s=s.replace(old_join,new_join,2)
 
 old = """                    amount = c.getDouble(3),
                     quantity = c.getDouble(4),
